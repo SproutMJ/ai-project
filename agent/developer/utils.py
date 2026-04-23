@@ -1,4 +1,13 @@
-from developer.guard import assert_read, to_absolute
+from developer.guard import assert_read, to_absolute, BASE_DIR
+
+PROMPT_DIR = BASE_DIR / "agent" / "developer" / "prompts"
+
+
+def load_prompt(name: str) -> str:
+    path = PROMPT_DIR / name
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
+
 
 def read_files(paths):
     contents = {}
