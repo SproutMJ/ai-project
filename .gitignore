@@ -30,3 +30,6 @@ replay_pid*
 out/
 !**/src/main/**/out/
 !**/src/test/**/out/
+
+agent/developer/prompts/*.txt
+!agent/developer/prompts/*-template.txt
