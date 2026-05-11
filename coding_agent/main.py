@@ -8,7 +8,7 @@ from qwen_agent.tools.base import BaseTool, register_tool
 from qwen_agent.tools import WebSearch, WebExtractor, CodeInterpreter, PythonExecutor, SimpleDocParser, DocParser
 from qwen_agent.utils.output_beautify import typewriter_print
 from qwen_agent.gui import WebUI
-
+import subprocess
 
 
 import logging
@@ -29,48 +29,254 @@ logging.basicConfig(level=logging.DEBUG)
 # logging.getLogger("qwen_agent.tools").setLevel(logging.DEBUG)
 
 
-ALLOWED_PREFIX = Path("/Users/kimminjun/Desktop/ai-project/ai-project/backend").resolve()
+ALLOWED_PREFIX = Path("").resolve()
 
 
 @register_tool("read_file_tool")
 class ReadFileTool(BaseTool):
     name = "read_file_tool"
-    description = "Read a file from local filesystem, only under the allowed backend directory."
+    description = f"Read one or more files from local filesystem, only under the allowed directory. allowed prefix is: {ALLOWED_PREFIX}"
     parameters = {
         "type": "object",
         "properties": {
-            "path": {
-                "type": "string",
-                "description": "Absolute file path"
+            "paths": {
+                "type": "array",
+                "items": {
+                    "type": "string",
+                    "description": "Absolute file path"
+                },
+                "description": "List of absolute file paths"
             }
         },
-        "required": ["path"]
+        "required": ["paths"]
     }
 
     def call(self, params: str, **kwargs) -> str:
         print("[tool] read_file_tool called")
         try:
             data = json.loads(params)
-            raw_path = data["path"]
+            raw_paths = data["paths"]
 
-            path = Path(raw_path).expanduser().resolve()
+            results = []
+            for raw_path in raw_paths:
+                path = Path(raw_path).expanduser().resolve()
 
-            if path != ALLOWED_PREFIX and ALLOWED_PREFIX not in path.parents:
-                return f"ERROR: access denied. Allowed path prefix: {ALLOWED_PREFIX}"
+                if path != ALLOWED_PREFIX and ALLOWED_PREFIX not in path.parents:
+                    results.append({
+                        "path": str(path),
+                        "error": f"access denied. Allowed path prefix: {ALLOWED_PREFIX}"
+                    })
+                    continue
 
-            if not path.is_file():
-                return f"ERROR: not a file: {path}"
+                if not path.is_file():
+                    results.append({
+                        "path": str(path),
+                        "error": f"not a file: {path}"
+                    })
+                    continue
 
-            with path.open("r", encoding="utf-8") as f:
-                return f.read()
+                with path.open("r", encoding="utf-8") as f:
+                    results.append({
+                        "path": str(path),
+                        "content": f.read()
+                    })
+
+            return json.dumps({"files": results}, ensure_ascii=False)
 
         except Exception as e:
             return f"ERROR: {str(e)}"
 
 
+
+def _resolve_under_allowed_prefix(raw_path: str) -> Path:
+    path = Path(raw_path).expanduser()
+
+    if path.is_absolute():
+        resolved = path.resolve()
+    else:
+        resolved = (ALLOWED_PREFIX / path).resolve()
+
+    if resolved != ALLOWED_PREFIX and ALLOWED_PREFIX not in resolved.parents:
+        raise PermissionError(
+            f"access denied. Allowed path prefix: {ALLOWED_PREFIX}"
+        )
+
+    return resolved
+
+
+@register_tool("patch_file_tool")
+class PatchFileTool(BaseTool):
+    name = "patch_file_tool"
+    description = (
+        f"Apply patch-style file writes only under the allowed directory. "
+        f"allowed prefix is: {ALLOWED_PREFIX}"
+    )
+    parameters = {
+        "type": "object",
+        "properties": {
+            "patch": {
+                "type": "object",
+                "properties": {
+                    "changes": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "file": {
+                                    "type": "string",
+                                    "description": "Relative or absolute file path",
+                                },
+                                "new_code": {
+                                    "type": "string",
+                                    "description": "Full updated file content",
+                                },
+                            },
+                            "required": ["file", "new_code"],
+                        },
+                    },
+                },
+                "required": ["changes"],
+            }
+        },
+        "required": ["patch"],
+    }
+
+    def call(self, params: str, **kwargs) -> str:
+        print("[tool] patch_file_tool called")
+        try:
+            data = json.loads(params)
+            patch = data["patch"]
+            changes = patch.get("changes", [])
+
+            if not isinstance(changes, list):
+                return "ERROR: patch.changes must be a list"
+
+            resolved_changes = []
+
+            for change in changes:
+                raw_path = change["file"]
+                new_code = change["new_code"]
+
+                abs_path = _resolve_under_allowed_prefix(raw_path)
+                resolved_changes.append((abs_path, new_code))
+
+            for abs_path, _ in resolved_changes:
+                abs_path.parent.mkdir(parents=True, exist_ok=True)
+
+            for abs_path, new_code in resolved_changes:
+                with abs_path.open("w", encoding="utf-8") as f:
+                    f.write(new_code)
+
+            return json.dumps(
+                {
+                    "ok": True,
+                    "changed_files": [str(path) for path, _ in resolved_changes],
+                },
+                ensure_ascii=False,
+            )
+
+        except Exception as e:
+            return f"ERROR: {str(e)}"
+
+
+
+
+ALLOWED_TASKS = {
+    "test": ["./gradlew", "test"],
+    "build": ["./gradlew", "build"],
+    "clean_test": ["./gradlew", "clean", "test"],
+}
+
+@register_tool("run_gradle_tool")
+class RunGradleTool(BaseTool):
+    name = "run_gradle_tool"
+    description = (
+        f"Run a safe Gradle command for a Spring project under the allowed directory only. "
+        f"Allowed prefix is: {ALLOWED_PREFIX}. "
+        f"Allowed tasks: {', '.join(ALLOWED_TASKS.keys())}"
+    )
+    parameters = {
+        "type": "object",
+        "properties": {
+            "project_root": {
+                "type": "string",
+                "description": "Absolute path to the Gradle project root directory"
+            },
+            "task": {
+                "type": "string",
+                "description": "Gradle task name. One of: test, build, clean_test"
+            }
+        },
+        "required": ["project_root", "task"]
+    }
+
+    def call(self, params: str, **kwargs) -> str:
+        print("[tool] run_gradle_tool called")
+        try:
+            data = json.loads(params)
+            project_root = Path(data["project_root"]).expanduser().resolve()
+            task = data["task"]
+
+            if project_root != ALLOWED_PREFIX and ALLOWED_PREFIX not in project_root.parents:
+                return json.dumps({
+                    "ok": False,
+                    "error": f"access denied. Allowed path prefix: {ALLOWED_PREFIX}"
+                }, ensure_ascii=False)
+
+            if not project_root.is_dir():
+                return json.dumps({
+                    "ok": False,
+                    "error": f"not a directory: {project_root}"
+                }, ensure_ascii=False)
+
+            gradlew = project_root / "gradlew"
+            if not gradlew.is_file():
+                return json.dumps({
+                    "ok": False,
+                    "error": f"gradlew not found in: {project_root}"
+                }, ensure_ascii=False)
+
+            if task not in ALLOWED_TASKS:
+                return json.dumps({
+                    "ok": False,
+                    "error": f"unsupported task: {task}",
+                    "allowed_tasks": list(ALLOWED_TASKS.keys())
+                }, ensure_ascii=False)
+
+            result = subprocess.run(
+                ALLOWED_TASKS[task],
+                cwd=str(project_root),
+                capture_output=True,
+                text=True,
+                timeout=300
+            )
+
+            log = (result.stdout or "") + (result.stderr or "")
+            return json.dumps({
+                "ok": result.returncode == 0,
+                "returncode": result.returncode,
+                "project_root": str(project_root),
+                "task": task,
+                "command": " ".join(ALLOWED_TASKS[task]),
+                "log": log[-12000:]
+            }, ensure_ascii=False)
+
+        except subprocess.TimeoutExpired:
+            return json.dumps({
+                "ok": False,
+                "error": "command timed out after 300 seconds"
+            }, ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({
+                "ok": False,
+                "error": str(e)
+            }, ensure_ascii=False)
+
+
 llm_cfg = {
     "model_type": "oai",
-    "model": "qwen3.6:35b-a3b",
+    # "model": "qwen3.6:35b-a3b",
+    "model": "qwen3.6:27b",
     "model_server": "http://localhost:11434/v1",
     "api_key": "EMPTY",
     "generate_cfg": {
@@ -80,118 +286,7 @@ llm_cfg = {
 }
 
 system_prompt = """
-You are a production-grade AI assistant with access to tools.
 
-# PRIMARY OBJECTIVE
-Deliver accurate, concise, and useful answers while minimizing tool usage, latency, and cost.
-
----
-
-# CORE PRINCIPLES
-
-1. Accuracy first. Never fabricate facts.
-2. Minimize tool usage. Tools are expensive and may fail.
-3. Use at most ONE tool unless absolutely necessary.
-4. If one tool result is sufficient, do not call another tool.
-5. Prefer reasoning over tool usage whenever possible.
-
----
-
-# TOOL USAGE DECISION
-
-Before calling any tool, you MUST internally decide:
-
-"Can I answer this confidently without a tool?"
-
-- If YES → Answer directly.
-- If NO → Use the most appropriate SINGLE tool.
-
----
-
-# TOOL SELECTION RULES
-
-## web_search
-Use ONLY when:
-- The query requires recent, real-time, or external information
-- The answer cannot be reliably inferred from general knowledge
-
-After using web_search:
-- If results contain a clear answer → STOP and respond
-- Do NOT call another tool
-
-## web_extractor
-Use ONLY when:
-- The user explicitly asks for source content
-- OR search results are insufficient and exact page content is required
-
-Never use it if a search snippet already answers the question.
-
-## code_interpreter
-Use ONLY when:
-- Complex computation is required
-- Structured data processing is needed
-- Code execution is necessary for correctness
-
-DO NOT use for:
-- Simple math
-- Date checks
-- Formatting
-- Basic logic
-
----
-
-# HARD CONSTRAINTS
-
-- Never call tools for:
-  - Greetings
-  - Explanations
-  - Summaries
-  - Rewriting
-  - Debugging discussions (unless external docs are required)
-
-- Never call multiple tools in sequence without a clear necessity
-- Never retry a tool more than once
-- Never use a second tool just to “double-check”
-
----
-
-# FAILURE HANDLING
-
-If a tool fails:
-1. Retry at most once
-2. If it still fails:
-   - Briefly state the failure
-   - Continue with best possible answer without the tool
-
----
-
-# RESPONSE STYLE
-
-- Be concise and direct
-- Avoid unnecessary verbosity
-- Clearly separate:
-  - Known facts
-  - Assumptions
-  - Uncertainty
-
-- Do NOT hallucinate missing information
-
----
-
-# PRIORITY ORDER
-
-1. User intent
-2. Accuracy
-3. Tool minimization
-4. Clarity
-
----
-
-# SUMMARY RULE
-
-Use tools ONLY when they are clearly necessary.
-One tool is usually enough.
-No tool is preferred when possible.
 """
 
 
@@ -201,18 +296,21 @@ bot = Assistant(
     system_message=system_prompt,
     function_list=[
         "read_file_tool",
+        'patch_file_tool',
+        'run_gradle_tool',
         WebSearch(),
-        WebExtractor(),
-        CodeInterpreter(),
-        PythonExecutor(),
+        # WebExtractor(),
+        # CodeInterpreter(),
+        # PythonExecutor(),
         SimpleDocParser(),
         DocParser()
     ]
 )
 
-
+#gui
 WebUI(bot).run()
 
+#cli
 # messages = [
 #     {
 #         "role": "user",
