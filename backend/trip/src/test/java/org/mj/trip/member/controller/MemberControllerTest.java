@@ -35,7 +35,7 @@ class MemberControllerTest {
         );
         given(memberService.getMyProfile(1L)).willReturn(response);
 
-        mockMvc.perform(get("/members/me")
+        mockMvc.perform(get("/v1/members/me")
                         .header("Authorization", "Bearer test-token"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
@@ -46,7 +46,7 @@ class MemberControllerTest {
 
     @Test
     void 내프로필조회_인증정보없음() throws Exception {
-        mockMvc.perform(get("/members/me"))
+        mockMvc.perform(get("/v1/members/me"))
                 .andExpect(status().isUnauthorized());
     }
 }

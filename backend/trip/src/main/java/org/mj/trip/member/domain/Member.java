@@ -21,6 +21,8 @@ public class Member {
     @Column(unique = true, nullable = true)
     private String email;
 
+    private String password;
+
     private String nickname;
     private String profileImageUrl;
 
@@ -32,8 +34,9 @@ public class Member {
     private LocalDateTime deletedAt;
 
     @Builder
-    public Member(String email, String nickname, String profileImageUrl, MemberStatus status) {
+    public Member(String email, String password, String nickname, String profileImageUrl, MemberStatus status) {
         this.email = email;
+        this.password = password;
         this.nickname = nickname;
         this.profileImageUrl = profileImageUrl;
         this.status = status != null ? status : MemberStatus.ACTIVE;
