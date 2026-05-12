@@ -7,6 +7,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Entity
 @Table(name = "MEMBER")
@@ -41,6 +43,16 @@ public class Member {
         this.profileImageUrl = profileImageUrl;
         this.status = status != null ? status : MemberStatus.ACTIVE;
         this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public void updateProfile(String nickname, String profileImageUrl) {
+        if (nickname != null) {
+            this.nickname = nickname;
+        }
+        if (profileImageUrl != null) {
+            this.profileImageUrl = profileImageUrl;
+        }
         this.updatedAt = LocalDateTime.now();
     }
 
