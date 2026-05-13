@@ -1,5 +1,8 @@
 package org.mj.trip.member.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import org.mj.trip.auth.token.JwtAuthenticationInterceptor;
 import org.mj.trip.common.dto.ApiResponse;
 import org.mj.trip.member.dto.MemberProfileResponse;
 import org.mj.trip.member.dto.SignupRequest;
@@ -7,7 +10,6 @@ import org.mj.trip.member.dto.SignupResponse;
 import org.mj.trip.member.dto.UpdateProfileRequest;
 import org.mj.trip.member.dto.WithdrawRequest;
 import org.mj.trip.member.service.MemberService;
-import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -30,43 +32,27 @@ public class MemberController {
     }
 
     @GetMapping("/me")
-    public ResponseEntity<ApiResponse<MemberProfileResponse>> getMyProfile(
-            @RequestHeader(value = "Authorization", required = false) String authHeader) {
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-
-        // TODO: 실제 구현 시 JWT 토큰에서 memberId 추출
-        Long memberId = 1L;
+    public ResponseEntity<ApiResponse<MemberProfileResponse>> getMyProfile(HttpServletRequest request) {
+        Long memberId = JwtAuthenticationInterceptor.getMemberIdFromRequest(request);
         MemberProfileResponse profile = memberService.getMyProfile(memberId);
         return ResponseEntity.ok(ApiResponse.success(profile));
     }
 
     @PatchMapping("/me")
     public ResponseEntity<ApiResponse<MemberProfileResponse>> updateMyProfile(
-            @RequestHeader(value = "Authorization", required = false) String authHeader,
-            @Valid @RequestBody UpdateProfileRequest request) {
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-
-        // TODO: 실제 구현 시 JWT 토큰에서 memberId 추출
-        Long memberId = 1L;
-        MemberProfileResponse profile = memberService.updateProfile(memberId, request);
+            HttpServletRequest request,
+            @Valid @RequestBody UpdateProfileRequest updateRequest) {
+        Long memberId = JwtAuthenticationInterceptor.getMemberIdFromRequest(request);
+        MemberProfileResponse profile = memberService.updateProfile(memberId, updateRequest);
         return ResponseEntity.ok(ApiResponse.success(profile));
     }
 
     @DeleteMapping("/me")
     public ResponseEntity<Void> withdraw(
-            @RequestHeader(value = "Authorization", required = false) String authHeader,
-            @RequestBody(required = false) WithdrawRequest request) {
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-
-        // TODO: 실제 구현 시 JWT 토큰에서 memberId 추출
-        Long memberId = 1L;
-        memberService.withdraw(memberId, request);
+            HttpServletRequest request,
+            @RequestBody(required = false) WithdrawRequest withdrawRequest) {
+        Long memberId = JwtAuthenticationInterceptor.getMemberIdFromRequest(request);
+        memberService.withdraw(memberId, withdrawRequest);
         return ResponseEntity.noContent().build();
     }
 }

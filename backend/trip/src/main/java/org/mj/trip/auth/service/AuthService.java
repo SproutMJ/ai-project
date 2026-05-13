@@ -3,6 +3,7 @@ package org.mj.trip.auth.service;
 import lombok.RequiredArgsConstructor;
 import org.mj.trip.auth.dto.LoginRequest;
 import org.mj.trip.auth.dto.LoginResponse;
+import org.mj.trip.auth.token.JwtTokenProvider;
 import org.mj.trip.common.exception.MemberNotFoundException;
 import org.mj.trip.member.domain.Member;
 import org.mj.trip.member.domain.MemberStatus;
@@ -15,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuthService {
 
     private final MemberRepository memberRepository;
+    private final JwtTokenProvider jwtTokenProvider;
 
     @Transactional(readOnly = true)
     public LoginResponse login(LoginRequest request) {
@@ -27,10 +29,10 @@ public class AuthService {
             throw new IllegalArgumentException("비밀번호가 일치하지 않습니다.");
         }
 
-        // TODO: 실제 구현 시 JWT 토큰 발급
-        String accessToken = "jwt-access-token";
-        String refreshToken = "jwt-refresh-token";
-        long expiresIn = 3600;
+        // JWT 토큰 발급
+        String accessToken = jwtTokenProvider.createAccessToken(member.getMemberId());
+        String refreshToken = jwtTokenProvider.createRefreshToken(member.getMemberId());
+        long expiresIn = jwtTokenProvider.getAccessTokenExpirationSeconds();
 
         return LoginResponse.builder()
                 .accessToken(accessToken)

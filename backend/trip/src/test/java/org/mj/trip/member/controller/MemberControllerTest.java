@@ -1,5 +1,6 @@
 package org.mj.trip.member.controller;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mj.trip.member.dto.MemberProfileResponse;
 import org.mj.trip.member.dto.SignupRequest;
@@ -16,6 +17,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -30,8 +32,18 @@ class MemberControllerTest {
     @MockitoBean
     private MemberService memberService;
 
+    @MockitoBean
+    private org.mj.trip.auth.token.JwtTokenProvider jwtTokenProvider;
+
     @Autowired
     private MockMvc mockMvc;
+
+    @BeforeEach
+    void setUp() {
+        // 테스트용 JWT 토큰 검증 모킹
+        given(jwtTokenProvider.validateToken(anyString())).willReturn(true);
+        given(jwtTokenProvider.getMemberId(anyString())).willReturn(1L);
+    }
 
     @Test
     void 내프로필조회_성공() throws Exception {
