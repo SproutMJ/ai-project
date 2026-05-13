@@ -9,6 +9,7 @@ import org.mj.trip.member.dto.MemberProfileResponse;
 import org.mj.trip.member.dto.SignupRequest;
 import org.mj.trip.member.dto.SignupResponse;
 import org.mj.trip.member.dto.UpdateProfileRequest;
+import org.mj.trip.member.dto.WithdrawRequest;
 import org.mj.trip.member.repository.MemberRepository;
 import org.mj.trip.member.repository.MemberTravelStyleRepository;
 import org.mj.trip.member.repository.TravelStyleRepository;
@@ -124,6 +125,14 @@ public class MemberService {
                 .collect(Collectors.toList());
 
         memberTravelStyleRepository.saveAll(newStyles);
+    }
+
+    @Transactional
+    public void withdraw(Long memberId, WithdrawRequest request) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new org.mj.trip.common.exception.MemberNotFoundException("회원을 찾을 수 없습니다"));
+
+        member.withdraw();
     }
 
     private String formatDate(java.time.LocalDateTime dateTime) {
