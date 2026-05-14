@@ -139,6 +139,6 @@ public class MemberService {
         if (dateTime == null) {
             return null;
         }
-        return dateTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        return dateTime.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
     }
 }

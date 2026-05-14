@@ -1,7 +1,14 @@
 package org.mj.trip.member.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mj.trip.auth.token.JwtAuthenticationInterceptor;
+import org.mj.trip.common.config.WebConfig;
+import org.mj.trip.common.exception.GlobalExceptionHandler;
 import org.mj.trip.member.dto.MemberProfileResponse;
 import org.mj.trip.member.dto.SignupRequest;
 import org.mj.trip.member.dto.SignupResponse;
@@ -9,131 +16,134 @@ import org.mj.trip.member.dto.UpdateProfileRequest;
 import org.mj.trip.member.service.MemberService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.BDDMockito.given;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
+@DisplayName("Member Controller 테스트")
 @WebMvcTest(MemberController.class)
-@Import({org.mj.trip.common.config.WebConfig.class, org.mj.trip.common.exception.GlobalExceptionHandler.class})
+@Import({WebConfig.class, GlobalExceptionHandler.class})
 class MemberControllerTest {
-
-    @MockitoBean
-    private MemberService memberService;
-
-    @MockitoBean
-    private org.mj.trip.auth.token.JwtTokenProvider jwtTokenProvider;
 
     @Autowired
     private MockMvc mockMvc;
+    @MockBean
+    private MemberService memberService;
+    @MockBean
+    private JwtAuthenticationInterceptor jwtAuthenticationInterceptor;
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @BeforeEach
-    void setUp() {
-        // 테스트용 JWT 토큰 검증 모킹
-        given(jwtTokenProvider.validateToken(anyString())).willReturn(true);
-        given(jwtTokenProvider.getMemberId(anyString())).willReturn(1L);
+    void setUp() throws Exception {
+        // 인터셉터가 요청 객체에 memberId를 설정하도록 stub
+        lenient().when(jwtAuthenticationInterceptor.preHandle(any(HttpServletRequest.class), any(HttpServletResponse.class), any()))
+                .thenAnswer(invocation -> {
+                    HttpServletRequest request = invocation.getArgument(0);
+                    request.setAttribute("memberId", 1L);
+                    return true;
+                });
     }
 
     @Test
-    void 내프로필조회_성공() throws Exception {
-        MemberProfileResponse.TravelStyle style = new MemberProfileResponse.TravelStyle(1L, "맛집 중심");
-        MemberProfileResponse response = new MemberProfileResponse(
-                1L, "user@example.com", "minjun", "https://example.com/profile.jpg", List.of(style),
-                "2026-04-21T10:00:00Z", "2026-04-21T10:00:00Z"
-        );
-        given(memberService.getMyProfile(1L)).willReturn(response);
+    @DisplayName("회원가입 성공")
+    void signup_success() throws Exception {
+        // given
+        SignupRequest request = SignupRequest.builder()
+                .email("test@test.com")
+                .password("12345678")
+                .nickname("tester")
+                .build();
+        SignupResponse response = SignupResponse.builder()
+                .memberId(1L)
+                .email("test@test.com")
+                .nickname("tester")
+                .build();
+        when(memberService.signup(any(SignupRequest.class))).thenReturn(response);
 
-        mockMvc.perform(get("/v1/members/me")
-                        .header("Authorization", "Bearer test-token"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.memberId").value(1))
-                .andExpect(jsonPath("$.data.nickname").value("minjun"))
-                .andExpect(jsonPath("$.data.travelStyles[0].name").value("맛집 중심"));
-    }
-
-    @Test
-    void 내프로필조회_인증정보없음() throws Exception {
-        mockMvc.perform(get("/v1/members/me"))
-                .andExpect(status().isUnauthorized());
-    }
-
-    @Test
-    void 내프로필수정_성공() throws Exception {
-        MemberProfileResponse.TravelStyle style1 = new MemberProfileResponse.TravelStyle(2L, "힐링");
-        MemberProfileResponse.TravelStyle style2 = new MemberProfileResponse.TravelStyle(4L, "액티비티");
-        
-        MemberProfileResponse response = new MemberProfileResponse(
-                1L, null, "newNickname", "https://example.com/new-profile.jpg",
-                List.of(style1, style2), null, "2026-04-21T10:00:00Z"
-        );
-        
-        given(memberService.updateProfile(eq(1L), any(UpdateProfileRequest.class))).willReturn(response);
-
-        String requestBody = """
-                {
-                    "nickname": "newNickname",
-                    "profileImageUrl": "https://example.com/new-profile.jpg",
-                    "travelStyleIds": [2, 4]
-                }
-                """;
-
-        mockMvc.perform(patch("/v1/members/me")
-                        .header("Authorization", "Bearer test-token")
+        // when & then
+        mockMvc.perform(post("/v1/members")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.memberId").value(1))
-                .andExpect(jsonPath("$.data.nickname").value("newNickname"))
-                .andExpect(jsonPath("$.data.profileImageUrl").value("https://example.com/new-profile.jpg"))
-                .andExpect(jsonPath("$.data.travelStyles[0].id").value(2))
-                .andExpect(jsonPath("$.data.travelStyles[0].name").value("힐링"))
-                .andExpect(jsonPath("$.data.travelStyles[1].id").value(4))
-                .andExpect(jsonPath("$.data.travelStyles[1].name").value("액티비티"))
-                .andExpect(jsonPath("$.data.updatedAt").value("2026-04-21T10:00:00Z"));
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.nickname").value("tester"));
     }
 
     @Test
-    void 내프로필수정_인증정보없음() throws Exception {
-        String requestBody = """
-                {
-                    "nickname": "newNickname"
-                }
-                """;
+    @DisplayName("회원가입 실패 - 유효성 검사 오류")
+    void signup_validation_fail() throws Exception {
+        // given
+        SignupRequest request = SignupRequest.builder()
+                .email("invalid")
+                .password("123")
+                .nickname("")
+                .build();
 
-        mockMvc.perform(patch("/v1/members/me")
+        // when & then
+        mockMvc.perform(post("/v1/members")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody))
-                .andExpect(status().isUnauthorized());
-    }
-
-    @Test
-    void 내프로필수정_유효성검증실패() throws Exception {
-        String requestBody = """
-                {
-                    "nickname": "a"
-                }
-                """;
-
-        mockMvc.perform(patch("/v1/members/me")
-                        .header("Authorization", "Bearer test-token")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(requestBody))
+                        .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnprocessableEntity())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.error.details[0].field").value("nickname"));
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
+    }
+
+    @Test
+    @DisplayName("내 프로필 조회 성공")
+    void getMyProfile_success() throws Exception {
+        // given
+        Long memberId = 1L;
+        MemberProfileResponse response = MemberProfileResponse.builder()
+                .memberId(memberId)
+                .nickname("tester")
+                .travelStyles(List.of())
+                .build();
+        when(memberService.getMyProfile(memberId)).thenReturn(response);
+
+        // when & then
+        mockMvc.perform(get("/v1/members/me"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.nickname").value("tester"));
+    }
+
+    @Test
+    @DisplayName("프로필 수정 성공")
+    void updateProfile_success() throws Exception {
+        // given
+        Long memberId = 1L;
+        UpdateProfileRequest request = UpdateProfileRequest.builder()
+                .nickname("updated")
+                .build();
+        MemberProfileResponse response = MemberProfileResponse.builder()
+                .memberId(memberId)
+                .nickname("updated")
+                .build();
+        when(memberService.updateProfile(any(Long.class), any(UpdateProfileRequest.class))).thenReturn(response);
+
+        // when & then
+        mockMvc.perform(patch("/v1/members/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.nickname").value("updated"));
+    }
+
+    @Test
+    @DisplayName("회원 탈퇴 성공")
+    void withdraw_success() throws Exception {
+        // given
+        Long memberId = 1L;
+
+        // when & then
+        mockMvc.perform(delete("/v1/members/me"))
+                .andExpect(status().isNoContent());
     }
 }

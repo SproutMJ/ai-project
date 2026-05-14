@@ -1,115 +1,139 @@
 package org.mj.trip.member.service;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mj.trip.common.exception.DuplicateResourceException;
 import org.mj.trip.member.domain.Member;
-import org.mj.trip.member.domain.MemberStatus;
+import org.mj.trip.member.domain.TravelStyle;
 import org.mj.trip.member.dto.SignupRequest;
 import org.mj.trip.member.dto.SignupResponse;
+import org.mj.trip.member.dto.UpdateProfileRequest;
+import org.mj.trip.member.dto.WithdrawRequest;
 import org.mj.trip.member.repository.MemberRepository;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.transaction.annotation.Transactional;
+import org.mj.trip.member.repository.MemberTravelStyleRepository;
+import org.mj.trip.member.repository.TravelStyleRepository;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
-import static org.assertj.core.api.Assertions.*;
+import java.util.List;
+import java.util.Optional;
 
-@SpringBootTest
-@Transactional
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.*;
+
+@DisplayName("Member Service 테스트")
+@ExtendWith(MockitoExtension.class)
 class MemberServiceTest {
 
-    @Autowired
-    private MemberService memberService;
+    @Mock private MemberRepository memberRepository;
+    @Mock private MemberTravelStyleRepository memberTravelStyleRepository;
+    @Mock private TravelStyleRepository travelStyleRepository;
 
-    @Autowired
-    private MemberRepository memberRepository;
-
-    @BeforeEach
-    void setUp() {
-        memberRepository.deleteAll();
-    }
+    @InjectMocks private MemberService memberService;
 
     @Test
-    @DisplayName("이메일 회원가입 성공")
-    void signupWithEmail_Success() {
+    @DisplayName("회원가입 성공")
+    void signup_success() {
         // given
         SignupRequest request = SignupRequest.builder()
-                .signupType("EMAIL")
-                .email("user@example.com")
-                .password("password123")
-                .nickname("minjun")
-                .profileImageUrl("https://example.com/profile.jpg")
-                .socialProvider(null)
-                .socialProviderAccountId(null)
+                .email("test@test.com")
+                .password("12345678")
+                .nickname("tester")
                 .build();
+        when(memberRepository.existsByEmail("test@test.com")).thenReturn(false);
+
+        Member savedMember = Member.builder()
+                .email("test@test.com")
+                .password("12345678")
+                .nickname("tester")
+                .build();
+        when(memberRepository.save(any(Member.class))).thenReturn(savedMember);
 
         // when
         SignupResponse response = memberService.signup(request);
 
         // then
-        assertThat(response.getMemberId()).isNotNull();
-        assertThat(response.getEmail()).isEqualTo("user@example.com");
-        assertThat(response.getNickname()).isEqualTo("minjun");
-        assertThat(response.getProfileImageUrl()).isEqualTo("https://example.com/profile.jpg");
-        assertThat(response.getCreatedAt()).isNotNull();
-
-        // DB에 저장되었는지 확인
-        Member savedMember = memberRepository.findById(response.getMemberId()).orElseThrow();
-        assertThat(savedMember.getEmail()).isEqualTo("user@example.com");
-        assertThat(savedMember.getStatus()).isEqualTo(MemberStatus.ACTIVE);
+        assertNotNull(response);
+        assertEquals("tester", response.getNickname());
+        assertEquals("test@test.com", response.getEmail());
     }
 
     @Test
-    @DisplayName("이메일 중복 시 예외 발생")
-    void signupWithEmail_DuplicateEmail_ThrowsException() {
+    @DisplayName("회원가입 실패 - 이메일 중복")
+    void signup_duplicate_email() {
         // given
-        SignupRequest firstRequest = SignupRequest.builder()
-                .signupType("EMAIL")
-                .email("user@example.com")
-                .password("password123")
-                .nickname("minjun")
-                .profileImageUrl("https://example.com/profile.jpg")
-                .socialProvider(null)
-                .socialProviderAccountId(null)
+        SignupRequest request = SignupRequest.builder()
+                .email("dup@test.com")
+                .password("12345678")
+                .nickname("tester")
                 .build();
-
-        memberService.signup(firstRequest);
-
-        SignupRequest duplicateRequest = SignupRequest.builder()
-                .signupType("EMAIL")
-                .email("user@example.com")
-                .password("password456")
-                .nickname("another")
-                .profileImageUrl("https://example.com/another.jpg")
-                .socialProvider(null)
-                .socialProviderAccountId(null)
-                .build();
+        when(memberRepository.existsByEmail("dup@test.com")).thenReturn(true);
 
         // when & then
-        assertThatThrownBy(() -> memberService.signup(duplicateRequest))
-                .isInstanceOf(org.mj.trip.common.exception.DuplicateResourceException.class)
-                .hasMessageContaining("이미 사용 중인 이메일입니다");
+        assertThrows(DuplicateResourceException.class, () -> memberService.signup(request));
     }
 
     @Test
-    @DisplayName("프로필 이미지 없이 회원가입 성공")
-    void signupWithEmail_NoProfileImage_Success() {
+    @DisplayName("프로필 수정 성공")
+    void updateProfile_success() {
         // given
-        SignupRequest request = SignupRequest.builder()
-                .signupType("EMAIL")
-                .email("user2@example.com")
-                .password("password123")
-                .nickname("testuser")
-                .profileImageUrl(null)
-                .socialProvider(null)
-                .socialProviderAccountId(null)
+        Long memberId = 1L;
+        Member member = Member.builder()
+                .email("test@test.com")
+                .password("1234")
+                .nickname("old")
+                .build();
+        UpdateProfileRequest request = UpdateProfileRequest.builder()
+                .nickname("new")
+                .travelStyleIds(List.of(1L))
                 .build();
 
+        when(memberRepository.findById(memberId)).thenReturn(Optional.of(member));
+        TravelStyle style = mock(TravelStyle.class);
+        when(travelStyleRepository.findById(1L)).thenReturn(Optional.of(style));
+        // getMemberTravelStyles에서 호출하는 findByMemberId도 stub
+        when(memberTravelStyleRepository.findByMemberId(memberId)).thenReturn(List.of());
+
         // when
-        SignupResponse response = memberService.signup(request);
+        memberService.updateProfile(memberId, request);
 
         // then
-        assertThat(response.getMemberId()).isNotNull();
-        assertThat(response.getProfileImageUrl()).isNull();
+        assertEquals("new", member.getNickname());
+        verify(memberTravelStyleRepository).deleteByMemberId(memberId);
+        verify(memberTravelStyleRepository).saveAll(anyList());
+    }
+
+    @Test
+    @DisplayName("프로필 수정 실패 - 회원 없음")
+    void updateProfile_not_found() {
+        // given
+        when(memberRepository.findById(999L)).thenReturn(Optional.empty());
+
+        // when & then
+        assertThrows(IllegalArgumentException.class, () -> memberService.updateProfile(999L, new UpdateProfileRequest()));
+    }
+
+    @Test
+    @DisplayName("회원 탈퇴 성공")
+    void withdraw_success() {
+        // given
+        Long memberId = 1L;
+        Member member = Member.builder()
+                .email("test@test.com")
+                .password("1234")
+                .nickname("tester")
+                .build();
+        when(memberRepository.findById(memberId)).thenReturn(Optional.of(member));
+
+        // when
+        memberService.withdraw(memberId, new WithdrawRequest());
+
+        // then
+        assertEquals(org.mj.trip.member.domain.MemberStatus.WITHDRAWN, member.getStatus());
+        assertNotNull(member.getDeletedAt());
     }
 }

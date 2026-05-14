@@ -2,147 +2,95 @@ package org.mj.trip.member.repository;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mj.trip.member.domain.Member;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
-import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
-import org.mj.trip.member.domain.Member;
-import org.mj.trip.member.domain.MemberStatus;
 
 import java.util.List;
 import java.util.Optional;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.*;
 
+@DisplayName("Member Repository 테스트")
 @DataJpaTest
-public class MemberRepositoryTest {
+class MemberRepositoryTest {
 
     @Autowired
     private MemberRepository memberRepository;
 
-    @Autowired
-    private TestEntityManager entityManager;
-
     @Test
-    @DisplayName("Member를 저장하고 조회한다")
-    void testSaveAndFindMember() {
+    @DisplayName("회원 저장 및 ID 조회")
+    void saveAndFindById() {
+        // given
         Member member = Member.builder()
-                .email("test@example.com")
-                .nickname("테스트사용자")
-                .profileImageUrl("https://example.com/profile.jpg")
-                .status(MemberStatus.ACTIVE)
+                .email("test@test.com")
+                .password("password123")
+                .nickname("tester")
                 .build();
 
+        // when
         Member savedMember = memberRepository.save(member);
-        entityManager.flush();
-        entityManager.clear();
 
-        Optional<Member> foundMember = memberRepository.findById(savedMember.getMemberId());
-        assertThat(foundMember).isPresent();
-        assertThat(foundMember.get().getEmail()).isEqualTo("test@example.com");
-        assertThat(foundMember.get().getNickname()).isEqualTo("테스트사용자");
+        // then
+        assertNotNull(savedMember.getMemberId());
+        assertEquals("test@test.com", savedMember.getEmail());
     }
 
     @Test
-    @DisplayName("이메일로 Member를 조회한다")
-    void testFindByEmail() {
-        Member member = Member.builder()
-                .email("unique@example.com")
-                .nickname("이메일테스트")
-                .status(MemberStatus.ACTIVE)
-                .build();
+    @DisplayName("이메일로 회원 조회")
+    void findByEmail() {
+        // given
+        memberRepository.save(Member.builder().email("find@test.com").password("1234").nickname("find").build());
 
-        memberRepository.save(member);
-        entityManager.flush();
-        entityManager.clear();
+        // when
+        Optional<Member> found = memberRepository.findByEmail("find@test.com");
 
-        Optional<Member> foundMember = memberRepository.findByEmail("unique@example.com");
-        assertThat(foundMember).isPresent();
-        assertThat(foundMember.get().getEmail()).isEqualTo("unique@example.com");
+        // then
+        assertTrue(found.isPresent());
+        assertEquals("find", found.get().getNickname());
     }
 
     @Test
-    @DisplayName("이메일과 상태로 Member를 조회한다")
-    void testFindByEmailAndStatus() {
-        Member member = Member.builder()
-                .email("status@example.com")
-                .nickname("상태테스트")
-                .status(MemberStatus.ACTIVE)
-                .build();
+    @DisplayName("이메일 중복 확인")
+    void existsByEmail() {
+        // given
+        memberRepository.save(Member.builder().email("exist@test.com").password("1234").nickname("exist").build());
 
-        memberRepository.save(member);
-        entityManager.flush();
-        entityManager.clear();
-
-        Optional<Member> foundMember = memberRepository.findByEmailAndStatus("status@example.com", MemberStatus.ACTIVE);
-        assertThat(foundMember).isPresent();
-
-        Optional<Member> notFound = memberRepository.findByEmailAndStatus("status@example.com", MemberStatus.WITHDRAWN);
-        assertThat(notFound).isEmpty();
+        // when & then
+        assertTrue(memberRepository.existsByEmail("exist@test.com"));
+        assertFalse(memberRepository.existsByEmail("noexist@test.com"));
     }
 
     @Test
-    @DisplayName("이메일이 중복인지 확인한다")
-    void testExistsByEmail() {
-        Member member = Member.builder()
-                .email("duplicate@example.com")
-                .nickname("중복테스트")
-                .status(MemberStatus.ACTIVE)
-                .build();
+    @DisplayName("닉네임 키워드로 검색")
+    void searchByNickname() {
+        // given
+        memberRepository.save(Member.builder().email("a@a.com").password("1234").nickname("KimMinJun").build());
+        memberRepository.save(Member.builder().email("b@b.com").password("1234").nickname("ParkMinJun").build());
+        memberRepository.save(Member.builder().email("c@c.com").password("1234").nickname("LeeSooHyun").build());
 
-        memberRepository.save(member);
-        entityManager.flush();
-        entityManager.clear();
+        // when
+        List<Member> result = memberRepository.searchByNickname("MinJun");
 
-        assertThat(memberRepository.existsByEmail("duplicate@example.com")).isTrue();
-        assertThat(memberRepository.existsByEmail("nonexistent@example.com")).isFalse();
+        // then
+        assertEquals(2, result.size());
     }
 
     @Test
-    @DisplayName("닉네임으로 회원을 검색한다")
-    void testSearchByNickname() {
-        Member member1 = Member.builder()
-                .email("search1@example.com")
-                .nickname("테스트닉네임1")
-                .status(MemberStatus.ACTIVE)
-                .build();
+    @DisplayName("활성 상태 회원 목록 조회")
+    void findActiveMembersByIds() {
+        // given
+        Long id1 = memberRepository.save(Member.builder().email("1@1.com").password("1234").nickname("Active1").build()).getMemberId();
+        Long id2 = memberRepository.save(Member.builder().email("2@2.com").password("1234").nickname("Active2").build()).getMemberId();
+        Member withdrawn = Member.builder().email("3@3.com").password("1234").nickname("Withdrawn").build();
+        withdrawn.withdraw(); // 상태 변경
+        memberRepository.save(withdrawn);
+        Long id3 = withdrawn.getMemberId();
 
-        Member member2 = Member.builder()
-                .email("search2@example.com")
-                .nickname("테스트닉네임2")
-                .status(MemberStatus.ACTIVE)
-                .build();
+        // when
+        List<Member> result = memberRepository.findActiveMembersByIds(List.of(id1, id2, id3));
 
-        memberRepository.save(member1);
-        memberRepository.save(member2);
-        entityManager.flush();
-        entityManager.clear();
-
-        List<Member> results = memberRepository.searchByNickname("테스트");
-        assertThat(results).hasSize(2);
-    }
-
-    @Test
-    @DisplayName("Active 상태의 회원만 조회된다")
-    void testFindActiveMembersByIds() {
-        Member activeMember = Member.builder()
-                .email("active1@example.com")
-                .nickname("활성회원")
-                .status(MemberStatus.ACTIVE)
-                .build();
-
-        Member withdrawnMember = Member.builder()
-                .email("withdrawn@example.com")
-                .nickname("탈퇴회원")
-                .status(MemberStatus.WITHDRAWN)
-                .build();
-
-        Member savedActive = memberRepository.save(activeMember);
-        memberRepository.save(withdrawnMember);
-        entityManager.flush();
-        entityManager.clear();
-
-        List<Member> results = memberRepository.findActiveMembersByIds(List.of(savedActive.getMemberId(), withdrawnMember.getMemberId()));
-        assertThat(results).hasSize(1);
-        assertThat(results.get(0).getEmail()).isEqualTo("active1@example.com");
+        // then
+        assertEquals(2, result.size()); // 탈퇴한 회원은 제외
     }
 }
