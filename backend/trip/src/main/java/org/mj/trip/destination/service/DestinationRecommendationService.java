@@ -10,6 +10,11 @@ import org.mj.trip.destination.dto.DestinationRecommendationResponse;
 import org.mj.trip.destination.repository.RecommendationReasonRepository;
 import org.mj.trip.destination.repository.RecommendationRepository;
 import org.mj.trip.destination.repository.RecommendationRequestRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +42,7 @@ public class DestinationRecommendationService {
                 .season(request.getSeason())
                 .companionCount(request.getCompanionCount())
                 .durationDays(request.getDurationDays())
+                .summary(request.getSummary())
                 .build();
 
         recommendationRequest = recommendationRequestRepository.save(recommendationRequest);
@@ -46,6 +52,9 @@ public class DestinationRecommendationService {
                 recommendationRequest.getRecommendationRequestId(),
                 request
         );
+
+        // 생성된 추천 목록 저장 (ID 발급을 위해 필수)
+        recommendations = recommendationRepository.saveAll(recommendations).stream().toList();
 
         // 3. 추천 이유 생성
         for (Recommendation recommendation : recommendations) {
@@ -81,6 +90,49 @@ public class DestinationRecommendationService {
                 .recommendations(responseRecommendations)
                 .createdAt(recommendationRequest.getCreatedAt())
                 .build();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<DestinationRecommendationResponse.RecommendationSummary> listRecommendations(
+            String region, String tripPurpose, String season,
+            LocalDateTime createdFrom, LocalDateTime createdTo,
+            int page, int size, String sort, String order) {
+        // 정렬 설정
+        Sort.Direction direction = "asc".equalsIgnoreCase(order) ? Sort.Direction.ASC : Sort.Direction.DESC;
+        String sortBy = (sort != null && !sort.isEmpty()) ? sort : "createdAt";
+        Pageable pageable = PageRequest.of(page - 1, size, Sort.by(direction, sortBy));
+
+        // 동적 필터링
+        Specification<RecommendationRequest> spec = Specification.where(null);
+        if (region != null && !region.isEmpty()) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("region"), region));
+        }
+        if (tripPurpose != null && !tripPurpose.isEmpty()) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("tripPurpose"), tripPurpose));
+        }
+        if (season != null && !season.isEmpty()) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("season"), season));
+        }
+        if (createdFrom != null) {
+            spec = spec.and((root, query, cb) -> cb.greaterThanOrEqualTo(root.get("createdAt"), createdFrom));
+        }
+        if (createdTo != null) {
+            spec = spec.and((root, query, cb) -> cb.lessThanOrEqualTo(root.get("createdAt"), createdTo));
+        }
+
+        Page<RecommendationRequest> requestPage = recommendationRequestRepository.findAll(spec, pageable);
+
+        return requestPage.map(req -> DestinationRecommendationResponse.RecommendationSummary.builder()
+                .recommendationRequestId(req.getRecommendationRequestId())
+                .summary(req.getSummary())
+                .createdAt(req.getCreatedAt())
+                .region(req.getRegion())
+                .tripPurpose(req.getTripPurpose())
+                .budgetRange(req.getBudgetRange())
+                .season(req.getSeason())
+                .companionCount(req.getCompanionCount())
+                .durationDays(req.getDurationDays())
+                .build());
     }
 
     private List<Recommendation> generateRecommendations(Long recommendationRequestId, DestinationRecommendationRequest request) {

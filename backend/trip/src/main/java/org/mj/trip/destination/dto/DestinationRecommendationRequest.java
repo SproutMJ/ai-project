@@ -37,10 +37,12 @@ public class DestinationRecommendationRequest {
     @Max(value = 30, message = "여행 기간은 30일 이하여야 합니다.")
     private Integer durationDays;
 
+    private String summary;
+
     @Builder
     public DestinationRecommendationRequest(String tripPurpose, List<Long> travelStyleIds,
                                             String budgetRange, String region, String season,
-                                            Integer companionCount, Integer durationDays) {
+                                            Integer companionCount, Integer durationDays, String summary) {
         this.tripPurpose = tripPurpose;
         this.travelStyleIds = travelStyleIds;
         this.budgetRange = budgetRange;
@@ -48,5 +50,6 @@ public class DestinationRecommendationRequest {
         this.season = season;
         this.companionCount = companionCount;
         this.durationDays = durationDays;
+        this.summary = summary;
     }
 }

@@ -7,9 +7,13 @@ import org.mj.trip.common.dto.ApiResponse;
 import org.mj.trip.destination.dto.DestinationRecommendationRequest;
 import org.mj.trip.destination.dto.DestinationRecommendationResponse;
 import org.mj.trip.destination.service.DestinationRecommendationService;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDateTime;
+import java.util.List;
 
 @RestController
 @RequestMapping("/v1")
@@ -30,5 +34,41 @@ public class DestinationRecommendationController {
                 memberId, destinationRecommendationRequest);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(response));
+    }
+
+    @GetMapping("/destination-recommendations")
+    public ResponseEntity<ApiResponse<List<DestinationRecommendationResponse.RecommendationSummary>>> listRecommendations(
+            @RequestParam(required = false) String region,
+            @RequestParam(required = false) String tripPurpose,
+            @RequestParam(required = false) String season,
+            @RequestParam(required = false) String createdFrom,
+            @RequestParam(required = false) String createdTo,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "createdAt") String sort,
+            @RequestParam(defaultValue = "desc") String order) {
+
+        LocalDateTime createdFromDt = (createdFrom != null && !createdFrom.isEmpty())
+                ? LocalDateTime.parse(createdFrom)
+                : null;
+        LocalDateTime createdToDt = (createdTo != null && !createdTo.isEmpty())
+                ? LocalDateTime.parse(createdTo)
+                : null;
+
+        Page<DestinationRecommendationResponse.RecommendationSummary> result = destinationRecommendationService.listRecommendations(
+                region, tripPurpose, season, createdFromDt, createdToDt, page, size, sort, order);
+
+        ApiResponse<List<DestinationRecommendationResponse.RecommendationSummary>> response = ApiResponse.
+                <List<DestinationRecommendationResponse.RecommendationSummary>>success(
+                        result.getContent(),
+                        ApiResponse.Meta.builder()
+                                .page(result.getNumber() + 1)
+                                .size(result.getSize())
+                                .totalElements(result.getTotalElements())
+                                .totalPages(result.getTotalPages())
+                                .build()
+                );
+
+        return ResponseEntity.ok(response);
     }
 }

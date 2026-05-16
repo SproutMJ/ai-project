@@ -1,0 +1,6 @@
+{
+  "java": {
+    "command": "jdtls",
+    "args": ["-configuration", ".jdtls-config", "-data", ".jdtls-workspace"]
+  }
+}

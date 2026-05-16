@@ -30,6 +30,7 @@ class RecommendationRequestRepositoryTest {
                 .season("여름")
                 .companionCount(2)
                 .durationDays(5)
+                .summary("휴식 여행 요청")
                 .build();
 
         // when
@@ -53,6 +54,7 @@ class RecommendationRequestRepositoryTest {
                 .season("여름")
                 .companionCount(2)
                 .durationDays(5)
+                .summary("휴식 여행 요청")
                 .build());
         recommendationRequestRepository.save(RecommendationRequest.builder()
                 .memberId(1L)
@@ -62,6 +64,7 @@ class RecommendationRequestRepositoryTest {
                 .season("겨울")
                 .companionCount(4)
                 .durationDays(7)
+                .summary("쇼핑 여행 요청")
                 .build());
         recommendationRequestRepository.save(RecommendationRequest.builder()
                 .memberId(2L)
@@ -71,6 +74,7 @@ class RecommendationRequestRepositoryTest {
                 .season("봄")
                 .companionCount(1)
                 .durationDays(3)
+                .summary("관광 여행 요청")
                 .build());
 
         // when
@@ -102,6 +106,7 @@ class RecommendationRequestRepositoryTest {
                 .season("여름")
                 .companionCount(2)
                 .durationDays(5)
+                .summary("휴식 여행 요청")
                 .build());
         Long id = saved.getRecommendationRequestId();
 

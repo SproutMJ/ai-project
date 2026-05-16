@@ -16,6 +16,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -23,8 +27,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -481,5 +487,405 @@ class DestinationRecommendationControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.success").value(true));
+    }
+
+    // ================== listRecommendations 테스트 ====================
+
+    @Test
+    @DisplayName("추천 목록 조회 성공 - 기본 페이지네이션")
+    void listRecommendations_success_default() throws Exception {
+        // given
+        List<DestinationRecommendationResponse.RecommendationSummary> summaries = List.of(
+                DestinationRecommendationResponse.RecommendationSummary.builder()
+                        .recommendationRequestId(1L)
+                        .summary("첫 번째 여행 계획")
+                        .createdAt(LocalDateTime.of(2024, 1, 1, 10, 0))
+                        .region("default")
+                        .tripPurpose("default")
+                        .budgetRange("default")
+                        .season("default")
+                        .companionCount(1)
+                        .durationDays(1)
+                        .build(),
+                DestinationRecommendationResponse.RecommendationSummary.builder()
+                        .recommendationRequestId(2L)
+                        .summary("두 번째 여행 계획")
+                        .createdAt(LocalDateTime.of(2024, 1, 2, 10, 0))
+                        .region("default")
+                        .tripPurpose("default")
+                        .budgetRange("default")
+                        .season("default")
+                        .companionCount(1)
+                        .durationDays(1)
+                        .build(),
+                DestinationRecommendationResponse.RecommendationSummary.builder()
+                        .recommendationRequestId(3L)
+                        .summary("세 번째 여행 계획")
+                        .createdAt(LocalDateTime.of(2024, 1, 3, 10, 0))
+                        .region("default")
+                        .tripPurpose("default")
+                        .budgetRange("default")
+                        .season("default")
+                        .companionCount(1)
+                        .durationDays(1)
+                        .build()
+        );
+
+        Page<DestinationRecommendationResponse.RecommendationSummary> page = new PageImpl<>(
+                summaries,
+                PageRequest.of(0, 20),
+                3
+        );
+
+        when(destinationRecommendationService.listRecommendations(
+                null, null, null, null, null, 1, 20, "createdAt", "desc"))
+                .thenReturn(page);
+
+        // when & then
+        mockMvc.perform(get("/v1/destination-recommendations")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.length()").value(3))
+                .andExpect(jsonPath("$.data[0].recommendationRequestId").value(1))
+                .andExpect(jsonPath("$.data[0].summary").value("첫 번째 여행 계획"))
+                .andExpect(jsonPath("$.meta.page").value(1))
+                .andExpect(jsonPath("$.meta.size").value(20))
+                .andExpect(jsonPath("$.meta.totalElements").value(3))
+                .andExpect(jsonPath("$.meta.totalPages").value(1));
+    }
+
+    @Test
+    @DisplayName("추천 목록 조회 성공 - region 필터 적용")
+    void listRecommendations_success_withRegion() throws Exception {
+        // given
+        List<DestinationRecommendationResponse.RecommendationSummary> summaries = List.of(
+                DestinationRecommendationResponse.RecommendationSummary.builder()
+                        .recommendationRequestId(10L)
+                        .summary("일본 여행 계획")
+                        .createdAt(LocalDateTime.of(2024, 3, 15, 10, 0))
+                        .region("default")
+                        .tripPurpose("default")
+                        .budgetRange("default")
+                        .season("default")
+                        .companionCount(1)
+                        .durationDays(1)
+                        .build()
+        );
+
+        Page<DestinationRecommendationResponse.RecommendationSummary> page = new PageImpl<>(
+                summaries,
+                PageRequest.of(0, 20),
+                1
+        );
+
+        when(destinationRecommendationService.listRecommendations(
+                "일본", null, null, null, null, 1, 20, "createdAt", "desc"))
+                .thenReturn(page);
+
+        // when & then
+        mockMvc.perform(get("/v1/destination-recommendations")
+                        .param("region", "일본")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].recommendationRequestId").value(10))
+                .andExpect(jsonPath("$.data[0].summary").value("일본 여행 계획"));
+    }
+
+    @Test
+    @DisplayName("추천 목록 조회 성공 - tripPurpose 필터 적용")
+    void listRecommendations_success_withTripPurpose() throws Exception {
+        // given
+        List<DestinationRecommendationResponse.RecommendationSummary> summaries = List.of(
+                DestinationRecommendationResponse.RecommendationSummary.builder()
+                        .recommendationRequestId(20L)
+                        .summary("맛집탐방 여행 계획")
+                        .createdAt(LocalDateTime.of(2024, 5, 1, 10, 0))
+                        .region("default")
+                        .tripPurpose("default")
+                        .budgetRange("default")
+                        .season("default")
+                        .companionCount(1)
+                        .durationDays(1)
+                        .build()
+        );
+
+        Page<DestinationRecommendationResponse.RecommendationSummary> page = new PageImpl<>(
+                summaries,
+                PageRequest.of(0, 20),
+                1
+        );
+
+        when(destinationRecommendationService.listRecommendations(
+                null, "맛집탐방", null, null, null, 1, 20, "createdAt", "desc"))
+                .thenReturn(page);
+
+        // when & then
+        mockMvc.perform(get("/v1/destination-recommendations")
+                        .param("tripPurpose", "맛집탐방")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].summary").value("맛집탐방 여행 계획"));
+    }
+
+    @Test
+    @DisplayName("추천 목록 조회 성공 - season 필터 적용")
+    void listRecommendations_success_withSeason() throws Exception {
+        // given
+        List<DestinationRecommendationResponse.RecommendationSummary> summaries = List.of(
+                DestinationRecommendationResponse.RecommendationSummary.builder()
+                        .recommendationRequestId(30L)
+                        .summary("여름 여행 계획")
+                        .createdAt(LocalDateTime.of(2024, 6, 15, 10, 0))
+                        .region("default")
+                        .tripPurpose("default")
+                        .budgetRange("default")
+                        .season("default")
+                        .companionCount(1)
+                        .durationDays(1)
+                        .build()
+        );
+
+        Page<DestinationRecommendationResponse.RecommendationSummary> page = new PageImpl<>(
+                summaries,
+                PageRequest.of(0, 20),
+                1
+        );
+
+        when(destinationRecommendationService.listRecommendations(
+                null, null, "여름", null, null, 1, 20, "createdAt", "desc"))
+                .thenReturn(page);
+
+        // when & then
+        mockMvc.perform(get("/v1/destination-recommendations")
+                        .param("season", "여름")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].summary").value("여름 여행 계획"));
+    }
+
+    @Test
+    @DisplayName("추천 목록 조회 성공 - createdFrom 및 createdTo 필터 적용")
+    void listRecommendations_success_withCreatedDateRange() throws Exception {
+        // given
+        List<DestinationRecommendationResponse.RecommendationSummary> summaries = List.of(
+                DestinationRecommendationResponse.RecommendationSummary.builder()
+                        .recommendationRequestId(40L)
+                        .summary("특정 기간 여행 계획")
+                        .createdAt(LocalDateTime.of(2024, 7, 1, 10, 0))
+                        .region("default")
+                        .tripPurpose("default")
+                        .budgetRange("default")
+                        .season("default")
+                        .companionCount(1)
+                        .durationDays(1)
+                        .build()
+        );
+
+        Page<DestinationRecommendationResponse.RecommendationSummary> page = new PageImpl<>(
+                summaries,
+                PageRequest.of(0, 20),
+                1
+        );
+
+        LocalDateTime createdFrom = LocalDateTime.of(2024, 6, 1, 0, 0);
+        LocalDateTime createdTo = LocalDateTime.of(2024, 7, 31, 23, 59);
+
+        when(destinationRecommendationService.listRecommendations(
+                null, null, null, createdFrom, createdTo, 1, 20, "createdAt", "desc"))
+                .thenReturn(page);
+
+        // when & then
+        mockMvc.perform(get("/v1/destination-recommendations")
+                        .param("createdFrom", createdFrom.toString())
+                        .param("createdTo", createdTo.toString())
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].summary").value("특정 기간 여행 계획"));
+    }
+
+    @Test
+    @DisplayName("추천 목록 조회 성공 - 복수 필터 적용")
+    void listRecommendations_success_withMultipleFilters() throws Exception {
+        // given
+        List<DestinationRecommendationResponse.RecommendationSummary> summaries = List.of(
+                DestinationRecommendationResponse.RecommendationSummary.builder()
+                        .recommendationRequestId(50L)
+                        .summary("일본 쇼핑 여름 여행")
+                        .createdAt(LocalDateTime.of(2024, 8, 1, 10, 0))
+                        .region("default")
+                        .tripPurpose("default")
+                        .budgetRange("default")
+                        .season("default")
+                        .companionCount(1)
+                        .durationDays(1)
+                        .build()
+        );
+
+        Page<DestinationRecommendationResponse.RecommendationSummary> page = new PageImpl<>(
+                summaries,
+                PageRequest.of(0, 20),
+                1
+        );
+
+        when(destinationRecommendationService.listRecommendations(
+                "일본", "쇼핑", "여름", null, null, 1, 20, "createdAt", "desc"))
+                .thenReturn(page);
+
+        // when & then
+        mockMvc.perform(get("/v1/destination-recommendations")
+                        .param("region", "일본")
+                        .param("tripPurpose", "쇼핑")
+                        .param("season", "여름")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].recommendationRequestId").value(50));
+    }
+
+    @Test
+    @DisplayName("추천 목록 조회 성공 - 빈 결과")
+    void listRecommendations_success_emptyResult() throws Exception {
+        // given
+        Page<DestinationRecommendationResponse.RecommendationSummary> emptyPage = Page.empty();
+
+        when(destinationRecommendationService.listRecommendations(
+                null, null, null, null, null, 1, 20, "createdAt", "desc"))
+                .thenReturn(emptyPage);
+
+        // when & then
+        mockMvc.perform(get("/v1/destination-recommendations")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.length()").value(0))
+                .andExpect(jsonPath("$.meta.totalElements").value(0))
+                .andExpect(jsonPath("$.meta.totalPages").value(1));
+    }
+
+    @Test
+    @DisplayName("추천 목록 조회 성공 - 커서 페이지네이션")
+    void listRecommendations_success_cursorPagination() throws Exception {
+        // given
+        List<DestinationRecommendationResponse.RecommendationSummary> summaries = List.of(
+                DestinationRecommendationResponse.RecommendationSummary.builder()
+                        .recommendationRequestId(100L)
+                        .summary("페이지 2 계획")
+                        .createdAt(LocalDateTime.of(2024, 9, 1, 10, 0))
+                        .region("default")
+                        .tripPurpose("default")
+                        .budgetRange("default")
+                        .season("default")
+                        .companionCount(1)
+                        .durationDays(1)
+                        .build()
+        );
+
+        Page<DestinationRecommendationResponse.RecommendationSummary> page = new PageImpl<>(
+                summaries,
+                PageRequest.of(1, 10),
+                15L
+        );
+
+        when(destinationRecommendationService.listRecommendations(
+                any(), any(), any(), any(), any(), eq(2), eq(10), eq("createdAt"), eq("desc")))
+                .thenReturn(page);
+
+        // when & then
+        mockMvc.perform(get("/v1/destination-recommendations")
+                        .param("page", "2")
+                        .param("size", "10")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.meta.page").value(2))
+                .andExpect(jsonPath("$.meta.size").value(10))
+                .andExpect(jsonPath("$.meta.totalElements").value(15))
+                .andExpect(jsonPath("$.meta.totalPages").value(2));
+    }
+
+    @Test
+    @DisplayName("추천 목록 조회 성공 - 정렬 방향 asc")
+    void listRecommendations_success_ascOrder() throws Exception {
+        // given
+        List<DestinationRecommendationResponse.RecommendationSummary> summaries = List.of(
+                DestinationRecommendationResponse.RecommendationSummary.builder()
+                        .recommendationRequestId(200L)
+                        .summary("오래된 여행 계획")
+                        .createdAt(LocalDateTime.of(2024, 1, 1, 10, 0))
+                        .region("default")
+                        .tripPurpose("default")
+                        .budgetRange("default")
+                        .season("default")
+                        .companionCount(1)
+                        .durationDays(1)
+                        .build()
+        );
+
+        Page<DestinationRecommendationResponse.RecommendationSummary> page = new PageImpl<>(
+                summaries,
+                PageRequest.of(0, 20),
+                1
+        );
+
+        when(destinationRecommendationService.listRecommendations(
+                null, null, null, null, null, 1, 20, "createdAt", "asc"))
+                .thenReturn(page);
+
+        // when & then
+        mockMvc.perform(get("/v1/destination-recommendations")
+                        .param("order", "asc")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.length()").value(1));
+    }
+
+    @Test
+    @DisplayName("추천 목록 조회 성공 - 정렬 필드 변경")
+    void listRecommendations_success_customSortField() throws Exception {
+        // given
+        List<DestinationRecommendationResponse.RecommendationSummary> summaries = List.of(
+                DestinationRecommendationResponse.RecommendationSummary.builder()
+                        .recommendationRequestId(300L)
+                        .summary("정렬 테스트")
+                        .createdAt(LocalDateTime.of(2024, 10, 1, 10, 0))
+                        .region("default")
+                        .tripPurpose("default")
+                        .budgetRange("default")
+                        .season("default")
+                        .companionCount(1)
+                        .durationDays(1)
+                        .build()
+        );
+
+        Page<DestinationRecommendationResponse.RecommendationSummary> page = new PageImpl<>(
+                summaries,
+                PageRequest.of(0, 20),
+                1
+        );
+
+        when(destinationRecommendationService.listRecommendations(
+                null, null, null, null, null, 1, 20, "recommendationRequestId", "desc"))
+                .thenReturn(page);
+
+        // when & then
+        mockMvc.perform(get("/v1/destination-recommendations")
+                        .param("sort", "recommendationRequestId")
+                        .param("order", "desc")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.length()").value(1));
     }
 }

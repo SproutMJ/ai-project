@@ -20,6 +20,12 @@ import org.mockito.quality.Strictness;
 import org.mockito.Mockito;
 
 import java.util.List;
+import java.time.LocalDateTime;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -802,5 +808,196 @@ class DestinationRecommendationServiceTest {
         assertThrows(NullPointerException.class, () -> {
             testService.createRecommendation(memberId, request);
         });
+    }
+
+    // ==================== listRecommendations 테스트 (List Recommendations) ====================
+
+    @Test
+    @DisplayName("성공: 여행지 추천 목록 조회 - 기본 케이스")
+    void listRecommendations_success_basic() {
+        // given
+        Page<RecommendationRequest> mockPage = new PageImpl<>(List.of(
+                RecommendationRequest.builder().recommendationRequestId(1L).summary("첫 번째").createdAt(LocalDateTime.now()).build(),
+                RecommendationRequest.builder().recommendationRequestId(2L).summary("두 번째").createdAt(LocalDateTime.now()).build()
+        ));
+        when(recommendationRequestRepository.findAll(any(Specification.class), (Pageable) any())).thenReturn(mockPage);
+
+        // when
+        Page<DestinationRecommendationResponse.RecommendationSummary> result = destinationRecommendationService.listRecommendations(
+                null, null, null, null, null, 1, 10, "createdAt", "desc");
+
+        // then
+        assertNotNull(result);
+        assertEquals(2, result.getContent().size());
+        assertEquals("첫 번째", result.getContent().get(0).getSummary());
+        verify(recommendationRequestRepository).findAll(any(Specification.class), (Pageable) any());
+    }
+
+    @Test
+    @DisplayName("성공: 여행지 추천 목록 조회 - 지역 필터")
+    void listRecommendations_success_filterByRegion() {
+        // given
+        Page<RecommendationRequest> mockPage = new PageImpl<>(List.of(
+                RecommendationRequest.builder().recommendationRequestId(1L).region("일본").summary("일본 여행").createdAt(LocalDateTime.now()).build()
+        ));
+        when(recommendationRequestRepository.findAll(any(Specification.class), (Pageable) any())).thenReturn(mockPage);
+
+        // when
+        Page<DestinationRecommendationResponse.RecommendationSummary> result = destinationRecommendationService.listRecommendations(
+                "일본", null, null, null, null, 1, 10, "createdAt", "desc");
+
+        // then
+        assertNotNull(result);
+        assertEquals(1, result.getContent().size());
+        verify(recommendationRequestRepository).findAll(any(Specification.class), (Pageable) any());
+    }
+
+    @Test
+    @DisplayName("성공: 여행지 추천 목록 조회 - 여행 목적 필터")
+    void listRecommendations_success_filterByTripPurpose() {
+        // given
+        Page<RecommendationRequest> mockPage = new PageImpl<>(List.of(
+                RecommendationRequest.builder().recommendationRequestId(1L).tripPurpose("휴식").summary("휴식 여행").createdAt(LocalDateTime.now()).build()
+        ));
+        when(recommendationRequestRepository.findAll(any(Specification.class), (Pageable) any())).thenReturn(mockPage);
+
+        // when
+        Page<DestinationRecommendationResponse.RecommendationSummary> result = destinationRecommendationService.listRecommendations(
+                null, "휴식", null, null, null, 1, 10, "createdAt", "desc");
+
+        // then
+        assertNotNull(result);
+        assertEquals(1, result.getContent().size());
+        verify(recommendationRequestRepository).findAll(any(Specification.class), (Pageable) any());
+    }
+
+    @Test
+    @DisplayName("성공: 여행지 추천 목록 조회 - 계절 필터")
+    void listRecommendations_success_filterBySeason() {
+        // given
+        Page<RecommendationRequest> mockPage = new PageImpl<>(List.of(
+                RecommendationRequest.builder().recommendationRequestId(1L).season("여름").summary("여름 여행").createdAt(LocalDateTime.now()).build()
+        ));
+        when(recommendationRequestRepository.findAll(any(Specification.class), (Pageable) any())).thenReturn(mockPage);
+
+        // when
+        Page<DestinationRecommendationResponse.RecommendationSummary> result = destinationRecommendationService.listRecommendations(
+                null, null, "여름", null, null, 1, 10, "createdAt", "desc");
+
+        // then
+        assertNotNull(result);
+        assertEquals(1, result.getContent().size());
+        verify(recommendationRequestRepository).findAll(any(Specification.class), (Pageable) any());
+    }
+
+    @Test
+    @DisplayName("성공: 여행지 추천 목록 조회 - 날짜 범위 필터")
+    void listRecommendations_success_filterByDateRange() {
+        // given
+        LocalDateTime from = LocalDateTime.of(2023, 1, 1, 0, 0);
+        LocalDateTime to = LocalDateTime.of(2023, 12, 31, 23, 59);
+        Page<RecommendationRequest> mockPage = new PageImpl<>(List.of(
+                RecommendationRequest.builder().recommendationRequestId(1L).createdAt(LocalDateTime.of(2023, 6, 1, 0, 0)).summary("6월 여행").build()
+        ));
+        when(recommendationRequestRepository.findAll(any(Specification.class), (Pageable) any())).thenReturn(mockPage);
+
+        // when
+        Page<DestinationRecommendationResponse.RecommendationSummary> result = destinationRecommendationService.listRecommendations(
+                null, null, null, from, to, 1, 10, "createdAt", "desc");
+
+        // then
+        assertNotNull(result);
+        assertEquals(1, result.getContent().size());
+        verify(recommendationRequestRepository).findAll(any(Specification.class), (Pageable) any());
+    }
+
+    @Test
+    @DisplayName("성공: 여행지 추천 목록 조회 - 정렬 오름차순")
+    void listRecommendations_success_sortAsc() {
+        // given
+        Page<RecommendationRequest> mockPage = new PageImpl<>(List.of(
+                RecommendationRequest.builder().recommendationRequestId(1L).createdAt(LocalDateTime.of(2023, 1, 1, 0, 0)).build()
+        ));
+        when(recommendationRequestRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(mockPage);
+
+        // when
+        destinationRecommendationService.listRecommendations(
+                null, null, null, null, null, 1, 10, "createdAt", "asc");
+
+        // then
+        verify(recommendationRequestRepository).findAll(any(Specification.class), argThat((Pageable pageable) ->
+                pageable.getSort().toString().contains("createdAt,ASC,ignoreCase,ignoreRootNullMapping")));
+    }
+
+    @Test
+    @DisplayName("성공: 여행지 추천 목록 조회 - 정렬 내림차순")
+    void listRecommendations_success_sortDesc() {
+        // given
+        Page<RecommendationRequest> mockPage = new PageImpl<>(List.of(
+                RecommendationRequest.builder().recommendationRequestId(1L).createdAt(LocalDateTime.of(2023, 1, 1, 0, 0)).build()
+        ));
+        when(recommendationRequestRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(mockPage);
+
+        // when
+        destinationRecommendationService.listRecommendations(
+                null, null, null, null, null, 1, 10, "createdAt", "desc");
+
+        // then
+        verify(recommendationRequestRepository).findAll(any(Specification.class), argThat((Pageable pageable) ->
+                pageable.getSort().toString().contains("createdAt,DESC,ignoreCase,ignoreRootNullMapping")));
+    }
+
+    @Test
+    @DisplayName("성공: 여행지 추천 목록 조회 - 기본 정렬 적용")
+    void listRecommendations_success_defaultSort() {
+        // given
+        Page<RecommendationRequest> mockPage = new PageImpl<>(List.of(
+                RecommendationRequest.builder().recommendationRequestId(1L).createdAt(LocalDateTime.now()).build()
+        ));
+        when(recommendationRequestRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(mockPage);
+
+        // when
+        destinationRecommendationService.listRecommendations(
+                null, null, null, null, null, 1, 10, null, null);
+
+        // then
+        verify(recommendationRequestRepository).findAll(any(Specification.class), argThat((Pageable pageable) ->
+                pageable.getSort().toString().contains("createdAt,DESC")));
+    }
+
+    @Test
+    @DisplayName("성공: 여행지 추천 목록 조회 - 빈 결과 반환")
+    void listRecommendations_success_emptyResults() {
+        // given
+        Page<RecommendationRequest> mockPage = new PageImpl<>(List.of());
+        when(recommendationRequestRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(mockPage);
+
+        // when
+        Page<DestinationRecommendationResponse.RecommendationSummary> result = destinationRecommendationService.listRecommendations(
+                "존재하지않는지역", null, null, null, null, 1, 10, "createdAt", "desc");
+
+        // then
+        assertNotNull(result);
+        assertTrue(result.getContent().isEmpty());
+        assertEquals(0, result.getTotalElements());
+    }
+
+    @Test
+    @DisplayName("성공: 여행지 추천 목록 조회 - 여러 필터 조합")
+    void listRecommendations_success_multipleFilters() {
+        // given
+        Page<RecommendationRequest> mockPage = new PageImpl<>(List.of(
+                RecommendationRequest.builder().recommendationRequestId(1L).region("태국").tripPurpose("쇼핑").season("겨울").createdAt(LocalDateTime.now()).build()
+        ));
+        when(recommendationRequestRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(mockPage);
+
+        // when
+        Page<DestinationRecommendationResponse.RecommendationSummary> result = destinationRecommendationService.listRecommendations(
+                "태국", "쇼핑", "겨울", null, null, 1, 10, "createdAt", "desc");
+
+        // then
+        assertNotNull(result);
+        assertEquals(1, result.getContent().size());
+        verify(recommendationRequestRepository).findAll(any(Specification.class), (Pageable) any());
     }
 }

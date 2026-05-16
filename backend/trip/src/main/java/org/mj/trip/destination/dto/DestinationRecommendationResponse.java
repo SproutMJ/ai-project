@@ -15,6 +15,33 @@ public class DestinationRecommendationResponse {
 
     @Getter
     @Builder
+    public static class RecommendationSummary {
+        private Long recommendationRequestId;
+        private String summary;
+        private LocalDateTime createdAt;
+        
+        private String region;
+        private String tripPurpose;
+        private String budgetRange;
+        private String season;
+        private Integer companionCount;
+        private Integer durationDays;
+        
+        public RecommendationSummary(Long recommendationRequestId, String summary, LocalDateTime createdAt, String region, String tripPurpose, String budgetRange, String season, Integer companionCount, Integer durationDays) {
+            this.recommendationRequestId = recommendationRequestId;
+            this.summary = summary;
+            this.createdAt = createdAt;
+            this.region = region;
+            this.tripPurpose = tripPurpose;
+            this.budgetRange = budgetRange;
+            this.season = season;
+            this.companionCount = companionCount;
+            this.durationDays = durationDays;
+        }
+    }
+
+    @Getter
+    @Builder
     public static class Recommendation {
         private Long recommendationId;
         private Long destinationId;
