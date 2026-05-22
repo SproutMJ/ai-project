@@ -1,21 +1,16 @@
-import logging
+import tools.tools
+from qwen_agent.agents import Assistant
+from qwen_agent.gui import WebUI
+from qwen_agent.tools import WebSearch, SimpleDocParser, DocParser
 
+from logging_config import create_logger, setup_external_loggers
 
-def setup_logging():
-    root = logging.getLogger()
-    if root.handlers:
-        root.handlers.clear()
+setup_external_loggers()
 
-    logging.basicConfig(level=logging.INFO)
-    logging.basicConfig(level=logging.DEBUG)
+logger = create_logger("MAIN")
 
-    logging.getLogger("openai").setLevel(logging.DEBUG)
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("httpcore").setLevel(logging.WARNING)
-    logging.getLogger("qwen_agent").setLevel(logging.INFO)
-
-
-setup_logging()
+logger.info("main started")
+logger.debug("debug message")
 
 # logging.basicConfig(level=logging.INFO)
 # logging.getLogger("openai").setLevel(logging.DEBUG)
@@ -27,11 +22,9 @@ setup_logging()
 # logging.getLogger("qwen_agent.tools").setLevel(logging.DEBUG)
 
 
-from qwen_agent.agents import Assistant
-from qwen_agent.gui import WebUI
-from qwen_agent.tools import WebSearch, SimpleDocParser, DocParser
 
-import tools.tools  # noqa: F401  # 중요: decorator 등록을 위해 import만 해도 됨
+
+
 
 llm_cfg = {
     "model_type": "oai",
@@ -43,7 +36,7 @@ llm_cfg = {
         "top_p": 0.8,
         "use_raw_api": "true",
         'max_input_tokens': 58000,
-        'extra_body': {'enable_thinking': False}
+        # 'extra_body': {'enable_thinking': False}
     },
 }
 
@@ -63,15 +56,19 @@ mcp_config = {
 # Never stop without providing a final user-facing answer.
 # Always return a clear final conclusion.
 # """
-system_prompt = 'If the scope is large or unclear, narrow it before continuing.'
+system_prompt = ''
 
 bot = Assistant(
     llm=llm_cfg,
     system_message=system_prompt,
     function_list=[
-        mcp_config,
         # "read_file_tool",
         # "patch_file_tool",
+        # mcp_config,
+
+        "analyze_project_worker_tool",
+        "implement_worker_tool",
+
         "run_gradle_tool",
         WebSearch(),
         SimpleDocParser(),
