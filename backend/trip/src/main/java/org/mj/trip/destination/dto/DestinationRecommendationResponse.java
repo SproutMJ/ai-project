@@ -1,5 +1,6 @@
 package org.mj.trip.destination.dto;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -15,6 +16,7 @@ public class DestinationRecommendationResponse {
 
     @Getter
     @Builder
+    @AllArgsConstructor
     public static class RecommendationSummary {
         private Long recommendationRequestId;
         private String summary;
@@ -26,18 +28,6 @@ public class DestinationRecommendationResponse {
         private String season;
         private Integer companionCount;
         private Integer durationDays;
-        
-        public RecommendationSummary(Long recommendationRequestId, String summary, LocalDateTime createdAt, String region, String tripPurpose, String budgetRange, String season, Integer companionCount, Integer durationDays) {
-            this.recommendationRequestId = recommendationRequestId;
-            this.summary = summary;
-            this.createdAt = createdAt;
-            this.region = region;
-            this.tripPurpose = tripPurpose;
-            this.budgetRange = budgetRange;
-            this.season = season;
-            this.companionCount = companionCount;
-            this.durationDays = durationDays;
-        }
     }
 
     @Getter

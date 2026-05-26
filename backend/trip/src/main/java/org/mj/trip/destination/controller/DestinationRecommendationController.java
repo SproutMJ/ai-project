@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.mj.trip.auth.token.JwtAuthenticationInterceptor;
 import org.mj.trip.common.dto.ApiResponse;
+import org.mj.trip.destination.dto.DestinationRecommendationDetailResponse.DestinationRecommendationDetailData;
 import org.mj.trip.destination.dto.DestinationRecommendationRequest;
 import org.mj.trip.destination.dto.DestinationRecommendationResponse;
 import org.mj.trip.destination.service.DestinationRecommendationService;
@@ -56,7 +57,7 @@ public class DestinationRecommendationController {
                 : null;
 
         Page<DestinationRecommendationResponse.RecommendationSummary> result = destinationRecommendationService.listRecommendations(
-                region, tripPurpose, season, createdFromDt, createdToDt, page, size, sort, order);
+                region, tripPurpose, season, createdFromDt, createdToDt, page - 1, size, sort, order);
 
         ApiResponse<List<DestinationRecommendationResponse.RecommendationSummary>> response = ApiResponse.
                 <List<DestinationRecommendationResponse.RecommendationSummary>>success(
@@ -68,6 +69,30 @@ public class DestinationRecommendationController {
                                 .totalPages(result.getTotalPages())
                                 .build()
                 );
+
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/destination-recommendations/{recommendationRequestId}")
+    public ResponseEntity<ApiResponse<DestinationRecommendationDetailData>> getRecommendationDetail(
+            @PathVariable Long recommendationRequestId,
+            org.springframework.data.domain.Pageable pageable) {
+
+        DestinationRecommendationDetailData data = destinationRecommendationService.getRecommendationDetail(recommendationRequestId);
+
+        // Create a mock Page with single element to generate pagination metadata
+        org.springframework.data.domain.Page<DestinationRecommendationDetailData> mockPage = new org.springframework.data.domain.PageImpl<>(
+                java.util.Collections.singletonList(data), pageable, 1);
+
+        ApiResponse<DestinationRecommendationDetailData> response = ApiResponse.<DestinationRecommendationDetailData>success(
+                data,
+                ApiResponse.Meta.builder()
+                        .page(mockPage.getNumber() + 1)
+                        .size(mockPage.getSize())
+                        .totalElements(mockPage.getTotalElements())
+                        .totalPages(mockPage.getTotalPages())
+                        .build()
+        );
 
         return ResponseEntity.ok(response);
     }

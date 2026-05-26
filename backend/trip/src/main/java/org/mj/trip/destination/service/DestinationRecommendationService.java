@@ -1,10 +1,14 @@
 package org.mj.trip.destination.service;
 
 import lombok.RequiredArgsConstructor;
+import org.mj.trip.common.exception.ResourceNotFoundException;
 import org.mj.trip.destination.domain.ReasonType;
 import org.mj.trip.destination.domain.Recommendation;
 import org.mj.trip.destination.domain.RecommendationReason;
 import org.mj.trip.destination.domain.RecommendationRequest;
+import org.mj.trip.destination.dto.DestinationRecommendationDetailResponse.DestinationRecommendationDetailData;
+import org.mj.trip.destination.dto.DestinationRecommendationDetailResponse.DestinationRecommendationDetailData.RecommendationItem;
+import org.mj.trip.destination.dto.DestinationRecommendationDetailResponse.DestinationRecommendationDetailData.ReasonDetail;
 import org.mj.trip.destination.dto.DestinationRecommendationRequest;
 import org.mj.trip.destination.dto.DestinationRecommendationResponse;
 import org.mj.trip.destination.repository.RecommendationReasonRepository;
@@ -20,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
@@ -33,6 +38,19 @@ public class DestinationRecommendationService {
 
     @Transactional
     public DestinationRecommendationResponse createRecommendation(Long memberId, DestinationRecommendationRequest request) {
+        // Validate companionCount
+        if (request.getCompanionCount() != null && request.getCompanionCount() <= 0) {
+            throw new IllegalArgumentException("동반자 수는 1명 이상이어야 합니다.");
+        }
+        
+        // Validate durationDays
+        if (request.getDurationDays() != null && request.getDurationDays() <= 0) {
+            throw new IllegalArgumentException("여행 기간은 1일 이상이어야 합니다.");
+        }
+
+        // Fallback for null region
+//        String region = request.getRegion() != null ? request.getRegion() : "국내";
+
         // 1. RecommendationRequest 저장
         RecommendationRequest recommendationRequest = RecommendationRequest.builder()
                 .memberId(memberId)
@@ -50,7 +68,7 @@ public class DestinationRecommendationService {
         // 2. 추천 생성 (실제로는 AI나 알고리즘이 작동하지만, 여기서는 더미 데이터로 구현)
         List<Recommendation> recommendations = generateRecommendations(
                 recommendationRequest.getRecommendationRequestId(),
-                request
+                request, request.getRegion()
         );
 
         // 생성된 추천 목록 저장 (ID 발급을 위해 필수)
@@ -66,7 +84,7 @@ public class DestinationRecommendationService {
         List<DestinationRecommendationResponse.Recommendation> responseRecommendations = recommendations.stream()
                 .map(rec -> {
                     List<RecommendationReason> reasons = recommendationReasonRepository.findByRecommendationId(rec.getRecommendationId());
-                    List<DestinationRecommendationResponse.Reason> responseReasons = reasons.stream()
+                    List<DestinationRecommendationResponse.Reason> responseReasons = (reasons != null ? reasons : Collections.<RecommendationReason>emptyList()).stream()
                             .map(reason -> DestinationRecommendationResponse.Reason.builder()
                                     .type(reason.getType().name())
                                     .text(reason.getText())
@@ -100,7 +118,7 @@ public class DestinationRecommendationService {
         // 정렬 설정
         Sort.Direction direction = "asc".equalsIgnoreCase(order) ? Sort.Direction.ASC : Sort.Direction.DESC;
         String sortBy = (sort != null && !sort.isEmpty()) ? sort : "createdAt";
-        Pageable pageable = PageRequest.of(page - 1, size, Sort.by(direction, sortBy));
+        Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sortBy));
 
         // 동적 필터링
         Specification<RecommendationRequest> spec = Specification.where(null);
@@ -135,11 +153,10 @@ public class DestinationRecommendationService {
                 .build());
     }
 
-    private List<Recommendation> generateRecommendations(Long recommendationRequestId, DestinationRecommendationRequest request) {
+    private List<Recommendation> generateRecommendations(Long recommendationRequestId, DestinationRecommendationRequest request, String region) {
         List<Recommendation> recommendations = new ArrayList<>();
         Random random = new Random();
 
-        String region = request.getRegion();
         String[] destinations;
         if (region.equals("일본")) {
             destinations = new String[]{"도쿄", "오사카", "교토", "후쿠오카", "호쿠라쿠"};
@@ -201,6 +218,48 @@ public class DestinationRecommendationService {
         }
 
         return sb.toString();
+    }
+
+    @Transactional(readOnly = true)
+    public DestinationRecommendationDetailData getRecommendationDetail(Long recommendationRequestId) {
+        // 1. RecommendationRequest 조회
+        RecommendationRequest recommendationRequest = recommendationRequestRepository.findById(recommendationRequestId)
+                .orElseThrow(() -> new ResourceNotFoundException("RecommendationRequest not found: " + recommendationRequestId));
+
+        // 2. Recommendation 목록 조회
+        List<Recommendation> recommendations = recommendationRepository.findByRecommendationRequestIdOrderByRankOrderAsc(recommendationRequestId);
+
+        // 3. 응답 매핑
+        List<RecommendationItem> responseRecommendations = recommendations.stream()
+                .map(rec -> {
+                    List<RecommendationReason> reasons = recommendationReasonRepository.findByRecommendationId(rec.getRecommendationId());
+                    List<ReasonDetail> responseReasons = (reasons != null ? reasons : Collections.<RecommendationReason>emptyList()).stream()
+                            .map(reason -> ReasonDetail.builder()
+                                    .type(reason.getType().name())
+                                    .text(reason.getText())
+                                    .build())
+                            .toList();
+
+                    return RecommendationItem.builder()
+                            .recommendationId(rec.getRecommendationId())
+                            .destinationId(rec.getDestinationId())
+                            .destinationName(rec.getDestinationName())
+                            .score(rec.getScore())
+                            .rankOrder(rec.getRankOrder())
+                            .reasonSummary(rec.getReasonSummary())
+                            .reasons(responseReasons)
+                            .build();
+                })
+                .toList();
+
+        return DestinationRecommendationDetailData.builder()
+                .tripPurpose(recommendationRequest.getTripPurpose())
+                .budgetRange(recommendationRequest.getBudgetRange())
+                .region(recommendationRequest.getRegion())
+                .season(recommendationRequest.getSeason())
+                .createdAt(recommendationRequest.getCreatedAt())
+                .recommendations(responseRecommendations)
+                .build();
     }
 
     private List<RecommendationReason> generateReasons(Long recommendationId, DestinationRecommendationRequest request) {

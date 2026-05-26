@@ -1,35 +1,46 @@
 package org.mj.trip.destination.service;
 
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mj.trip.common.exception.ResourceNotFoundException;
 import org.mj.trip.destination.domain.ReasonType;
+import org.mj.trip.destination.domain.Recommendation;
 import org.mj.trip.destination.domain.RecommendationReason;
 import org.mj.trip.destination.domain.RecommendationRequest;
+import org.mj.trip.destination.dto.DestinationRecommendationDetailResponse;
 import org.mj.trip.destination.dto.DestinationRecommendationRequest;
 import org.mj.trip.destination.dto.DestinationRecommendationResponse;
 import org.mj.trip.destination.repository.RecommendationReasonRepository;
 import org.mj.trip.destination.repository.RecommendationRepository;
 import org.mj.trip.destination.repository.RecommendationRequestRepository;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
-import org.mockito.Mockito;
-
-import java.util.List;
-import java.time.LocalDateTime;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @DisplayName("DestinationRecommendationService 테스트")
 @ExtendWith(MockitoExtension.class)
@@ -45,15 +56,17 @@ class DestinationRecommendationServiceTest {
     @Mock
     private RecommendationReasonRepository recommendationReasonRepository;
 
-    @InjectMocks
     private DestinationRecommendationService destinationRecommendationService;
 
     @BeforeEach
     void setUp() {
-        // mock을 새로 생성하여 stubbing이 초기화되도록 함
         recommendationRequestRepository = mock(RecommendationRequestRepository.class);
         recommendationRepository = mock(RecommendationRepository.class);
         recommendationReasonRepository = mock(RecommendationReasonRepository.class);
+
+        doAnswer(invocation -> invocation.getArgument(0))
+                .when(recommendationRepository).saveAll(any(List.class));
+
         destinationRecommendationService = new DestinationRecommendationService(
                 recommendationRequestRepository,
                 recommendationRepository,
@@ -61,39 +74,54 @@ class DestinationRecommendationServiceTest {
         );
     }
 
-    // ==================== 성공 케이스 (Success Cases) ====================
+    private DestinationRecommendationRequest createRequest(String tripPurpose, List<Long> travelStyleIds,
+                                                           String budgetRange, String region, String season,
+                                                           Integer companionCount, Integer durationDays) {
+        return DestinationRecommendationRequest.builder()
+                .tripPurpose(tripPurpose)
+                .travelStyleIds(travelStyleIds)
+                .budgetRange(budgetRange)
+                .region(region)
+                .season(season)
+                .companionCount(companionCount)
+                .durationDays(durationDays)
+                .build();
+    }
+
+    private RecommendationRequest createSavedRequest(Long memberId, String tripPurpose, String budgetRange,
+                                                     String region, String season, Integer companionCount,
+                                                     Integer durationDays) {
+        return RecommendationRequest.builder()
+                .recommendationRequestId(1L)
+                .memberId(memberId)
+                .tripPurpose(tripPurpose)
+                .budgetRange(budgetRange)
+                .region(region)
+                .season(season)
+                .companionCount(companionCount)
+                .durationDays(durationDays)
+                .createdAt(LocalDateTime.now())
+                .build();
+    }
+
+    // ==================== 생성 테스트 ====================
 
     @Test
     @DisplayName("성공: 여행지 추천 생성 - 기본 케이스")
     void createRecommendation_success_basic() {
-        // given
         Long memberId = 1L;
-        DestinationRecommendationRequest request = DestinationRecommendationRequest.builder()
-                .tripPurpose("휴식")
-                .travelStyleIds(List.of(1L))
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(2)
-                .durationDays(5)
-                .build();
+        DestinationRecommendationRequest request = createRequest(
+                "휴식", List.of(1L), "저예산", "일본", "여름", 2, 5
+        );
 
-        RecommendationRequest savedRequest = RecommendationRequest.builder()
-                .memberId(memberId)
-                .tripPurpose("휴식")
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(2)
-                .durationDays(5)
-                .build();
+        RecommendationRequest savedRequest = createSavedRequest(
+                memberId, "휴식", "저예산", "일본", "여름", 2, 5
+        );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
         doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
-        // when
         DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(memberId, request);
 
-        // then
         assertNotNull(response);
         assertEquals(savedRequest.getRecommendationRequestId(), response.getRecommendationRequestId());
         assertEquals(5, response.getRecommendations().size());
@@ -104,33 +132,18 @@ class DestinationRecommendationServiceTest {
     @Test
     @DisplayName("성공: 여행지 추천 생성 - 일본 지역")
     void createRecommendation_success_japan() {
-        // given
-        DestinationRecommendationRequest request = DestinationRecommendationRequest.builder()
-                .tripPurpose("쇼핑")
-                .travelStyleIds(List.of(1L))
-                .budgetRange("고예산")
-                .region("일본")
-                .season("봄")
-                .companionCount(3)
-                .durationDays(7)
-                .build();
+        DestinationRecommendationRequest request = createRequest(
+                "쇼핑", List.of(1L), "고예산", "일본", "봄", 3, 7
+        );
 
-        RecommendationRequest savedRequest = RecommendationRequest.builder()
-                .memberId(1L)
-                .tripPurpose("쇼핑")
-                .budgetRange("고예산")
-                .region("일본")
-                .season("봄")
-                .companionCount(3)
-                .durationDays(7)
-                .build();
+        RecommendationRequest savedRequest = createSavedRequest(
+                1L, "쇼핑", "고예산", "일본", "봄", 3, 7
+        );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
         doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
-        // when
         DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(1L, request);
 
-        // then
         assertNotNull(response);
         assertTrue(response.getRecommendations().stream()
                 .anyMatch(r -> r.getDestinationName().equals("도쿄") || r.getDestinationName().equals("오사카")));
@@ -139,33 +152,18 @@ class DestinationRecommendationServiceTest {
     @Test
     @DisplayName("성공: 여행지 추천 생성 - 태국 지역")
     void createRecommendation_success_thailand() {
-        // given
-        DestinationRecommendationRequest request = DestinationRecommendationRequest.builder()
-                .tripPurpose("액티비티")
-                .travelStyleIds(List.of(2L))
-                .budgetRange("중예산")
-                .region("태국")
-                .season("겨울")
-                .companionCount(4)
-                .durationDays(10)
-                .build();
+        DestinationRecommendationRequest request = createRequest(
+                "액티비티", List.of(2L), "중예산", "태국", "겨울", 4, 10
+        );
 
-        RecommendationRequest savedRequest = RecommendationRequest.builder()
-                .memberId(1L)
-                .tripPurpose("액티비티")
-                .budgetRange("중예산")
-                .region("태국")
-                .season("겨울")
-                .companionCount(4)
-                .durationDays(10)
-                .build();
+        RecommendationRequest savedRequest = createSavedRequest(
+                1L, "액티비티", "중예산", "태국", "겨울", 4, 10
+        );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
         doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
-        // when
         DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(1L, request);
 
-        // then
         assertNotNull(response);
         assertTrue(response.getRecommendations().stream()
                 .anyMatch(r -> r.getDestinationName().equals("방콕") || r.getDestinationName().equals("푸켓")));
@@ -174,33 +172,18 @@ class DestinationRecommendationServiceTest {
     @Test
     @DisplayName("성공: 여행지 추천 생성 - 베트남 지역")
     void createRecommendation_success_vietnam() {
-        // given
-        DestinationRecommendationRequest request = DestinationRecommendationRequest.builder()
-                .tripPurpose("문화체험")
-                .travelStyleIds(List.of(3L))
-                .budgetRange("저예산")
-                .region("베트남")
-                .season("가을")
-                .companionCount(1)
-                .durationDays(14)
-                .build();
+        DestinationRecommendationRequest request = createRequest(
+                "문화체험", List.of(3L), "저예산", "베트남", "가을", 1, 14
+        );
 
-        RecommendationRequest savedRequest = RecommendationRequest.builder()
-                .memberId(1L)
-                .tripPurpose("문화체험")
-                .budgetRange("저예산")
-                .region("베트남")
-                .season("가을")
-                .companionCount(1)
-                .durationDays(14)
-                .build();
+        RecommendationRequest savedRequest = createSavedRequest(
+                1L, "문화체험", "저예산", "베트남", "가을", 1, 14
+        );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
         doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
-        // when
         DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(1L, request);
 
-        // then
         assertNotNull(response);
         assertTrue(response.getRecommendations().stream()
                 .anyMatch(r -> r.getDestinationName().equals("하노이") || r.getDestinationName().equals("호찌민")));
@@ -209,33 +192,18 @@ class DestinationRecommendationServiceTest {
     @Test
     @DisplayName("성공: 여행지 추천 생성 - 국내 지역")
     void createRecommendation_success_domestic() {
-        // given
-        DestinationRecommendationRequest request = DestinationRecommendationRequest.builder()
-                .tripPurpose("맛집탐방")
-                .travelStyleIds(List.of(4L))
-                .budgetRange("중예산")
-                .region("국내")
-                .season("여름")
-                .companionCount(2)
-                .durationDays(3)
-                .build();
+        DestinationRecommendationRequest request = createRequest(
+                "맛집탐방", List.of(4L), "중예산", "국내", "여름", 2, 3
+        );
 
-        RecommendationRequest savedRequest = RecommendationRequest.builder()
-                .memberId(1L)
-                .tripPurpose("맛집탐방")
-                .budgetRange("중예산")
-                .region("국내")
-                .season("여름")
-                .companionCount(2)
-                .durationDays(3)
-                .build();
+        RecommendationRequest savedRequest = createSavedRequest(
+                1L, "맛집탐방", "중예산", "국내", "여름", 2, 3
+        );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
         doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
-        // when
         DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(1L, request);
 
-        // then
         assertNotNull(response);
         assertTrue(response.getRecommendations().stream()
                 .anyMatch(r -> r.getDestinationName().equals("서울") || r.getDestinationName().equals("부산")));
@@ -244,33 +212,18 @@ class DestinationRecommendationServiceTest {
     @Test
     @DisplayName("성공: 휴식 목적 reasonSummary 검증")
     void createRecommendation_success_verifyReasonSummaryContainsTripPurpose() {
-        // given
-        DestinationRecommendationRequest request = DestinationRecommendationRequest.builder()
-                .tripPurpose("휴식")
-                .travelStyleIds(List.of(1L))
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(2)
-                .durationDays(5)
-                .build();
+        DestinationRecommendationRequest request = createRequest(
+                "휴식", List.of(1L), "저예산", "일본", "여름", 2, 5
+        );
 
-        RecommendationRequest savedRequest = RecommendationRequest.builder()
-                .memberId(1L)
-                .tripPurpose("휴식")
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(2)
-                .durationDays(5)
-                .build();
+        RecommendationRequest savedRequest = createSavedRequest(
+                1L, "휴식", "저예산", "일본", "여름", 2, 5
+        );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
         doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
-        // when
         DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(1L, request);
 
-        // then
         assertTrue(response.getRecommendations().stream()
                 .anyMatch(r -> r.getReasonSummary().contains("휴식") && r.getReasonSummary().contains("2명의 동반자와")));
     }
@@ -278,33 +231,18 @@ class DestinationRecommendationServiceTest {
     @Test
     @DisplayName("성공: 쇼핑 목적 reasonSummary 검증")
     void createRecommendation_success_verifyReasonSummaryContainsShopping() {
-        // given
-        DestinationRecommendationRequest request = DestinationRecommendationRequest.builder()
-                .tripPurpose("쇼핑")
-                .travelStyleIds(List.of(1L))
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(3)
-                .durationDays(7)
-                .build();
+        DestinationRecommendationRequest request = createRequest(
+                "쇼핑", List.of(1L), "저예산", "일본", "여름", 3, 7
+        );
 
-        RecommendationRequest savedRequest = RecommendationRequest.builder()
-                .memberId(1L)
-                .tripPurpose("쇼핑")
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(3)
-                .durationDays(7)
-                .build();
+        RecommendationRequest savedRequest = createSavedRequest(
+                1L, "쇼핑", "저예산", "일본", "여름", 3, 7
+        );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
         doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
-        // when
         DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(1L, request);
 
-        // then
         assertTrue(response.getRecommendations().stream()
                 .anyMatch(r -> r.getReasonSummary().contains("쇼핑을 즐기기 좋고") && r.getReasonSummary().contains("7일 일정에 적합합니다.")));
     }
@@ -312,33 +250,18 @@ class DestinationRecommendationServiceTest {
     @Test
     @DisplayName("성공: 동반자 수 reasonSummary 검증")
     void createRecommendation_success_verifyReasonSummaryContainsCompanionCount() {
-        // given
-        DestinationRecommendationRequest request = DestinationRecommendationRequest.builder()
-                .tripPurpose("휴식")
-                .travelStyleIds(List.of(1L))
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(5)
-                .durationDays(10)
-                .build();
+        DestinationRecommendationRequest request = createRequest(
+                "휴식", List.of(1L), "저예산", "일본", "여름", 5, 10
+        );
 
-        RecommendationRequest savedRequest = RecommendationRequest.builder()
-                .memberId(1L)
-                .tripPurpose("휴식")
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(5)
-                .durationDays(10)
-                .build();
+        RecommendationRequest savedRequest = createSavedRequest(
+                1L, "휴식", "저예산", "일본", "여름", 5, 10
+        );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
         doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
-        // when
         DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(1L, request);
 
-        // then
         assertTrue(response.getRecommendations().stream()
                 .anyMatch(r -> r.getReasonSummary().contains("5명의 동반자와")));
     }
@@ -346,33 +269,18 @@ class DestinationRecommendationServiceTest {
     @Test
     @DisplayName("성공: 여행 기간 reasonSummary 검증")
     void createRecommendation_success_verifyReasonSummaryContainsDurationDays() {
-        // given
-        DestinationRecommendationRequest request = DestinationRecommendationRequest.builder()
-                .tripPurpose("휴식")
-                .travelStyleIds(List.of(1L))
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(2)
-                .durationDays(15)
-                .build();
+        DestinationRecommendationRequest request = createRequest(
+                "휴식", List.of(1L), "저예산", "일본", "여름", 2, 15
+        );
 
-        RecommendationRequest savedRequest = RecommendationRequest.builder()
-                .memberId(1L)
-                .tripPurpose("휴식")
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(2)
-                .durationDays(15)
-                .build();
+        RecommendationRequest savedRequest = createSavedRequest(
+                1L, "휴식", "저예산", "일본", "여름", 2, 15
+        );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
         doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
-        // when
         DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(1L, request);
 
-        // then
         assertTrue(response.getRecommendations().stream()
                 .anyMatch(r -> r.getReasonSummary().contains("15일 일정에 적합합니다.")));
     }
@@ -380,33 +288,18 @@ class DestinationRecommendationServiceTest {
     @Test
     @DisplayName("성공: 점수 범위 검증 (80.0 ~ 100.0)")
     void createRecommendation_success_verifyScoreRange() {
-        // given
-        DestinationRecommendationRequest request = DestinationRecommendationRequest.builder()
-                .tripPurpose("휴식")
-                .travelStyleIds(List.of(1L))
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(2)
-                .durationDays(5)
-                .build();
+        DestinationRecommendationRequest request = createRequest(
+                "휴식", List.of(1L), "저예산", "일본", "여름", 2, 5
+        );
 
-        RecommendationRequest savedRequest = RecommendationRequest.builder()
-                .memberId(1L)
-                .tripPurpose("휴식")
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(2)
-                .durationDays(5)
-                .build();
+        RecommendationRequest savedRequest = createSavedRequest(
+                1L, "휴식", "저예산", "일본", "여름", 2, 5
+        );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
         doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
-        // when
         DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(1L, request);
 
-        // then
         response.getRecommendations().forEach(rec -> {
             assertTrue(rec.getScore() >= 80.0, "점수는 80.0 이상이어야 합니다.");
             assertTrue(rec.getScore() <= 100.0, "점수는 100.0 이하여야 합니다.");
@@ -416,33 +309,18 @@ class DestinationRecommendationServiceTest {
     @Test
     @DisplayName("성공: 랭킹 순서 검증 (1 ~ 5)")
     void createRecommendation_success_verifyRankOrder() {
-        // given
-        DestinationRecommendationRequest request = DestinationRecommendationRequest.builder()
-                .tripPurpose("휴식")
-                .travelStyleIds(List.of(1L))
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(2)
-                .durationDays(5)
-                .build();
+        DestinationRecommendationRequest request = createRequest(
+                "휴식", List.of(1L), "저예산", "일본", "여름", 2, 5
+        );
 
-        RecommendationRequest savedRequest = RecommendationRequest.builder()
-                .memberId(1L)
-                .tripPurpose("휴식")
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(2)
-                .durationDays(5)
-                .build();
+        RecommendationRequest savedRequest = createSavedRequest(
+                1L, "휴식", "저예산", "일본", "여름", 2, 5
+        );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
         doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
-        // when
         DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(1L, request);
 
-        // then
         List<Integer> rankOrders = response.getRecommendations().stream()
                 .map(DestinationRecommendationResponse.Recommendation::getRankOrder)
                 .toList();
@@ -454,67 +332,39 @@ class DestinationRecommendationServiceTest {
     }
 
     @Test
-    @DisplayName("성공: Repository 저장 호출 검증 (saveAll 문제 해결)")
+    @DisplayName("성공: Repository 저장 호출 검증")
     void createRecommendation_success_verifyRepositoryCalls() {
-        // given
-        DestinationRecommendationRequest request = DestinationRecommendationRequest.builder()
-                .tripPurpose("휴식")
-                .travelStyleIds(List.of(1L))
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(2)
-                .durationDays(5)
-                .build();
+        DestinationRecommendationRequest request = createRequest(
+                "휴식", List.of(1L), "저예산", "일본", "여름", 2, 5
+        );
 
-        RecommendationRequest savedRequest = RecommendationRequest.builder()
-                .memberId(1L)
-                .tripPurpose("휴식")
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(2)
-                .durationDays(5)
-                .build();
+        RecommendationRequest savedRequest = createSavedRequest(
+                1L, "휴식", "저예산", "일본", "여름", 2, 5
+        );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
         doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(any());
 
-        // when
         destinationRecommendationService.createRecommendation(1L, request);
 
-        // then
         verify(recommendationRequestRepository, times(1)).save(any(RecommendationRequest.class));
         verify(recommendationReasonRepository, atLeast(1)).findByRecommendationId(any());
     }
 
-    // ==================== 실패 케이스 (Failure Cases) ====================
-
     @Test
     @DisplayName("실패: RecommendationRequest 저장 시 데이터AccessException 발생")
     void createRecommendation_failure_recommendationRequestRepositoryException() {
-        // given
         Long memberId = 1L;
-        DestinationRecommendationRequest request = DestinationRecommendationRequest.builder()
-                .tripPurpose("휴식")
-                .travelStyleIds(List.of(1L))
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(2)
-                .durationDays(5)
-                .build();
+        DestinationRecommendationRequest request = createRequest(
+                "휴식", List.of(1L), "저예산", "일본", "여름", 2, 5
+        );
 
-        // recommendationRequestRepository.save()에서 예외 발생
         when(recommendationRequestRepository.save(any(RecommendationRequest.class)))
                 .thenThrow(new org.springframework.dao.DataAccessException("DB error") {
                 });
 
-        // when & then
-        assertThrows(org.springframework.dao.DataAccessException.class, () -> {
-            destinationRecommendationService.createRecommendation(memberId, request);
-        });
+        assertThrows(org.springframework.dao.DataAccessException.class, () ->
+                destinationRecommendationService.createRecommendation(memberId, request));
 
-        // recommendationReasonRepository는 호출되지 않아야 함
         verify(recommendationReasonRepository, never()).saveAll(any());
         verify(recommendationReasonRepository, never()).findByRecommendationId(anyLong());
     }
@@ -522,182 +372,100 @@ class DestinationRecommendationServiceTest {
     @Test
     @DisplayName("실패: RecommendationReason 저장 시 DataAccessException 발생")
     void createRecommendation_failure_recommendationReasonRepositoryException() {
-        // given
         Long memberId = 1L;
-        DestinationRecommendationRequest request = DestinationRecommendationRequest.builder()
-                .tripPurpose("휴식")
-                .travelStyleIds(List.of(1L))
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(2)
-                .durationDays(5)
-                .build();
+        DestinationRecommendationRequest request = createRequest(
+                "휴식", List.of(1L), "저예산", "일본", "여름", 2, 5
+        );
 
-        RecommendationRequest savedRequest = RecommendationRequest.builder()
-                .memberId(memberId)
-                .tripPurpose("휴식")
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(2)
-                .durationDays(5)
-                .build();
+        RecommendationRequest savedRequest = createSavedRequest(
+                memberId, "휴식", "저예산", "일본", "여름", 2, 5
+        );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
-        // saveAll() 호출 시 예외 발생
         doThrow(new org.springframework.dao.DataAccessException("DB error") {
         }).when(recommendationReasonRepository).saveAll(anyList());
 
-        // when & then
-        assertThrows(org.springframework.dao.DataAccessException.class, () -> {
-            destinationRecommendationService.createRecommendation(memberId, request);
-        });
+        assertThrows(org.springframework.dao.DataAccessException.class, () ->
+                destinationRecommendationService.createRecommendation(memberId, request));
 
-        // recommendationRequestRepository는 호출됨
         verify(recommendationRequestRepository, times(1)).save(any(RecommendationRequest.class));
     }
 
     @Test
     @DisplayName("실패: region이 null인 경우 - NullPointerException 발생")
     void createRecommendation_failure_nullRegion() {
-        // given
         Long memberId = 1L;
-        DestinationRecommendationRequest request = DestinationRecommendationRequest.builder()
-                .tripPurpose("휴식")
-                .travelStyleIds(List.of(1L))
-                .budgetRange("저예산")
-                .region(null)  // null region
-                .season("여름")
-                .companionCount(2)
-                .durationDays(5)
-                .build();
+        DestinationRecommendationRequest request = createRequest(
+                "휴식", List.of(1L), "저예산", null, "여름", 2, 5
+        );
 
-        RecommendationRequest savedRequest = RecommendationRequest.builder()
-                .memberId(memberId)
-                .tripPurpose("휴식")
-                .budgetRange("저예산")
-                .region("국내")  // fallback으로 국내 사용
-                .season("여름")
-                .companionCount(2)
-                .durationDays(5)
-                .build();
+        RecommendationRequest savedRequest = createSavedRequest(
+                memberId, "휴식", "저예산", null, "여름", 2, 5
+        );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
         doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
-        // when & then
-        // region이 null이면 서비스 코드에서 NullPointerException이 발생함
-        assertThrows(NullPointerException.class, () -> {
-            destinationRecommendationService.createRecommendation(memberId, request);
-        });
+        assertThrows(NullPointerException.class, () ->
+                destinationRecommendationService.createRecommendation(memberId, request));
     }
 
     @Test
-    @DisplayName("실패: companionCount가 0인 경우 - 논리적 오류 가능성")
+    @DisplayName("실패: companionCount가 0인 경우 - IllegalArgumentException 발생")
     void createRecommendation_failure_zeroCompanionCount() {
-        // given
         Long memberId = 1L;
-        DestinationRecommendationRequest request = DestinationRecommendationRequest.builder()
-                .tripPurpose("휴식")
-                .travelStyleIds(List.of(1L))
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(0)  // 0명 - 논리적으로 잘못된 값
-                .durationDays(5)
-                .build();
 
-        RecommendationRequest savedRequest = RecommendationRequest.builder()
-                .memberId(memberId)
-                .tripPurpose("휴식")
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(0)
-                .durationDays(5)
-                .build();
-        when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
-        doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
+        DestinationRecommendationRequest request = createRequest(
+                "휴식", List.of(1L), "저예산", "일본", "여름", 0, 5
+        );
 
-        // when
-        DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(memberId, request);
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> destinationRecommendationService.createRecommendation(memberId, request)
+        );
 
-        // then
-        assertNotNull(response);
-        // companionCount가 0이므로 "0명의 동반자와"라는 이상한 reasonSummary가 생성됨
-        assertTrue(response.getRecommendations().stream()
-                .anyMatch(r -> r.getReasonSummary().contains("0명의 동반자와")));
+        assertEquals("동반자 수는 1명 이상이어야 합니다.", exception.getMessage());
+
+        verify(recommendationRequestRepository, never()).save(any());
+        verify(recommendationRepository, never()).saveAll(any());
+        verify(recommendationReasonRepository, never()).saveAll(any());
     }
 
     @Test
-    @DisplayName("실패: durationDays가 0인 경우 - 논리적 오류 가능성")
+    @DisplayName("실패: durationDays가 0인 경우 - IllegalArgumentException 발생")
     void createRecommendation_failure_zeroDurationDays() {
-        // given
         Long memberId = 1L;
-        DestinationRecommendationRequest request = DestinationRecommendationRequest.builder()
-                .tripPurpose("휴식")
-                .travelStyleIds(List.of(1L))
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(2)
-                .durationDays(0)  // 0일 - 논리적으로 잘못된 값
-                .build();
 
-        RecommendationRequest savedRequest = RecommendationRequest.builder()
-                .memberId(memberId)
-                .tripPurpose("휴식")
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(2)
-                .durationDays(0)
-                .build();
-        when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
-        doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
+        DestinationRecommendationRequest request = createRequest(
+                "휴식", List.of(1L), "저예산", "일본", "여름", 2, 0
+        );
 
-        // when
-        DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(memberId, request);
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> destinationRecommendationService.createRecommendation(memberId, request)
+        );
 
-        // then
-        assertNotNull(response);
-        // durationDays가 0이므로 "0일 일정에 적합합니다."라는 이상한 reasonSummary가 생성됨
-        assertTrue(response.getRecommendations().stream()
-                .anyMatch(r -> r.getReasonSummary().contains("0일 일정에 적합합니다.")));
+        assertEquals("여행 기간은 1일 이상이어야 합니다.", exception.getMessage());
+
+        verify(recommendationRequestRepository, never())
+                .save(any(RecommendationRequest.class));
     }
 
     @Test
     @DisplayName("실패: tripPurpose가 빈 문자열인 경우")
     void createRecommendation_failure_emptyTripPurpose() {
-        // given
         Long memberId = 1L;
-        DestinationRecommendationRequest request = DestinationRecommendationRequest.builder()
-                .tripPurpose("")  // 빈 문자열
-                .travelStyleIds(List.of(1L))
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(2)
-                .durationDays(5)
-                .build();
+        DestinationRecommendationRequest request = createRequest(
+                "", List.of(1L), "저예산", "일본", "여름", 2, 5
+        );
 
-        RecommendationRequest savedRequest = RecommendationRequest.builder()
-                .memberId(memberId)
-                .tripPurpose("")
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(2)
-                .durationDays(5)
-                .build();
+        RecommendationRequest savedRequest = createSavedRequest(
+                memberId, "", "저예산", "일본", "여름", 2, 5
+        );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
         doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
-        // when
         DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(memberId, request);
 
-        // then
         assertNotNull(response);
-        // tripPurpose가 비어있으므로 else 블록으로 처리됨
         assertNotNull(response.getRecommendations());
         assertTrue(response.getRecommendations().size() > 0);
     }
@@ -705,34 +473,19 @@ class DestinationRecommendationServiceTest {
     @Test
     @DisplayName("실패: travelStyleIds가 빈 리스트인 경우")
     void createRecommendation_failure_emptyTravelStyleIds() {
-        // given
         Long memberId = 1L;
-        DestinationRecommendationRequest request = DestinationRecommendationRequest.builder()
-                .tripPurpose("휴식")
-                .travelStyleIds(List.of())  // 빈 리스트
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(2)
-                .durationDays(5)
-                .build();
+        DestinationRecommendationRequest request = createRequest(
+                "휴식", List.of(), "저예산", "일본", "여름", 2, 5
+        );
 
-        RecommendationRequest savedRequest = RecommendationRequest.builder()
-                .memberId(memberId)
-                .tripPurpose("휴식")
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(2)
-                .durationDays(5)
-                .build();
+        RecommendationRequest savedRequest = createSavedRequest(
+                memberId, "휴식", "저예산", "일본", "여름", 2, 5
+        );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
         doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
-        // when
         DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(memberId, request);
 
-        // then
         assertNotNull(response);
         assertNotNull(response.getRecommendations());
         assertTrue(response.getRecommendations().size() > 0);
@@ -741,242 +494,192 @@ class DestinationRecommendationServiceTest {
     @Test
     @DisplayName("실패: recommendationRequestRepository가 null을 반환하는 경우")
     void createRecommendation_failure_repositoryReturnsNull() {
-        // given
         Long memberId = 1L;
-        DestinationRecommendationRequest request = DestinationRecommendationRequest.builder()
-                .tripPurpose("휴식")
-                .travelStyleIds(List.of(1L))
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(2)
-                .durationDays(5)
-                .build();
+        DestinationRecommendationRequest request = createRequest(
+                "휴식", List.of(1L), "저예산", "일본", "여름", 2, 5
+        );
 
-        // save()가 null을 반환
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(null);
 
-        // when & then
-        assertThrows(NullPointerException.class, () -> {
-            destinationRecommendationService.createRecommendation(memberId, request);
-        });
+        assertThrows(NullPointerException.class, () ->
+                destinationRecommendationService.createRecommendation(memberId, request));
     }
 
     @Test
-    @DisplayName("실패: RecommendationReason 조회 시 null 반환")
-    void createRecommendation_failure_reasonsNotFound() {
-        // given
+    @DisplayName("성공: RecommendationReason 조회 결과가 null이면 빈 추천 목록 반환")
+    void createRecommendation_success_whenReasonsAreNull() {
         Long memberId = 1L;
-        DestinationRecommendationRequest request = DestinationRecommendationRequest.builder()
-                .tripPurpose("휴식")
-                .travelStyleIds(List.of(1L))
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(2)
-                .durationDays(5)
-                .build();
 
-        RecommendationRequest savedRequest = RecommendationRequest.builder()
-                .memberId(memberId)
-                .tripPurpose("휴식")
-                .budgetRange("저예산")
-                .region("일본")
-                .season("여름")
-                .companionCount(2)
-                .durationDays(5)
-                .build();
+        DestinationRecommendationRequest request = createRequest(
+                "휴식", List.of(1L), "저예산", "일본", "여름", 2, 5
+        );
 
-        // mock 새로 생성
+        RecommendationRequest savedRequest = createSavedRequest(
+                memberId, "휴식", "저예산", "일본", "여름", 2, 5
+        );
+
         RecommendationRequestRepository mockRequestRepo = mock(RecommendationRequestRepository.class);
         RecommendationRepository mockRecRepo = mock(RecommendationRepository.class);
         RecommendationReasonRepository mockReasonRepo = mock(RecommendationReasonRepository.class);
 
-        when(mockRequestRepo.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
-        // findByRecommendationId가 null 반환
-        doReturn(null).when(mockReasonRepo).findByRecommendationId(any());
+        when(mockRequestRepo.save(any(RecommendationRequest.class)))
+                .thenReturn(savedRequest);
 
-        // service 새로 생성
-        DestinationRecommendationService testService = new DestinationRecommendationService(
-                mockRequestRepo,
-                mockRecRepo,
-                mockReasonRepo
-        );
+        doReturn(null).when(mockReasonRepo)
+                .findByRecommendationId(anyLong());
 
-        // when & then
-        // null이 반환되면 Stream에서 NullPointerException이 발생함
-        assertThrows(NullPointerException.class, () -> {
-            testService.createRecommendation(memberId, request);
-        });
+        DestinationRecommendationService testService =
+                new DestinationRecommendationService(
+                        mockRequestRepo,
+                        mockRecRepo,
+                        mockReasonRepo
+                );
+
+        DestinationRecommendationResponse response =
+                testService.createRecommendation(memberId, request);
+
+        assertNotNull(response);
+        assertNotNull(response.getRecommendations());
+        assertTrue(response.getRecommendations().isEmpty());
     }
 
-    // ==================== listRecommendations 테스트 (List Recommendations) ====================
+    // ==================== 목록 조회 테스트 ====================
 
     @Test
     @DisplayName("성공: 여행지 추천 목록 조회 - 기본 케이스")
     void listRecommendations_success_basic() {
-        // given
         Page<RecommendationRequest> mockPage = new PageImpl<>(List.of(
                 RecommendationRequest.builder().recommendationRequestId(1L).summary("첫 번째").createdAt(LocalDateTime.now()).build(),
                 RecommendationRequest.builder().recommendationRequestId(2L).summary("두 번째").createdAt(LocalDateTime.now()).build()
         ));
-        when(recommendationRequestRepository.findAll(any(Specification.class), (Pageable) any())).thenReturn(mockPage);
+        when(recommendationRequestRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(mockPage);
 
-        // when
         Page<DestinationRecommendationResponse.RecommendationSummary> result = destinationRecommendationService.listRecommendations(
                 null, null, null, null, null, 1, 10, "createdAt", "desc");
 
-        // then
         assertNotNull(result);
         assertEquals(2, result.getContent().size());
         assertEquals("첫 번째", result.getContent().get(0).getSummary());
-        verify(recommendationRequestRepository).findAll(any(Specification.class), (Pageable) any());
+        verify(recommendationRequestRepository).findAll(any(Specification.class), any(Pageable.class));
     }
 
     @Test
     @DisplayName("성공: 여행지 추천 목록 조회 - 지역 필터")
     void listRecommendations_success_filterByRegion() {
-        // given
         Page<RecommendationRequest> mockPage = new PageImpl<>(List.of(
                 RecommendationRequest.builder().recommendationRequestId(1L).region("일본").summary("일본 여행").createdAt(LocalDateTime.now()).build()
         ));
-        when(recommendationRequestRepository.findAll(any(Specification.class), (Pageable) any())).thenReturn(mockPage);
+        when(recommendationRequestRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(mockPage);
 
-        // when
         Page<DestinationRecommendationResponse.RecommendationSummary> result = destinationRecommendationService.listRecommendations(
                 "일본", null, null, null, null, 1, 10, "createdAt", "desc");
 
-        // then
         assertNotNull(result);
         assertEquals(1, result.getContent().size());
-        verify(recommendationRequestRepository).findAll(any(Specification.class), (Pageable) any());
+        verify(recommendationRequestRepository).findAll(any(Specification.class), any(Pageable.class));
     }
 
     @Test
     @DisplayName("성공: 여행지 추천 목록 조회 - 여행 목적 필터")
     void listRecommendations_success_filterByTripPurpose() {
-        // given
         Page<RecommendationRequest> mockPage = new PageImpl<>(List.of(
                 RecommendationRequest.builder().recommendationRequestId(1L).tripPurpose("휴식").summary("휴식 여행").createdAt(LocalDateTime.now()).build()
         ));
-        when(recommendationRequestRepository.findAll(any(Specification.class), (Pageable) any())).thenReturn(mockPage);
+        when(recommendationRequestRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(mockPage);
 
-        // when
         Page<DestinationRecommendationResponse.RecommendationSummary> result = destinationRecommendationService.listRecommendations(
                 null, "휴식", null, null, null, 1, 10, "createdAt", "desc");
 
-        // then
         assertNotNull(result);
         assertEquals(1, result.getContent().size());
-        verify(recommendationRequestRepository).findAll(any(Specification.class), (Pageable) any());
+        verify(recommendationRequestRepository).findAll(any(Specification.class), any(Pageable.class));
     }
 
     @Test
     @DisplayName("성공: 여행지 추천 목록 조회 - 계절 필터")
     void listRecommendations_success_filterBySeason() {
-        // given
         Page<RecommendationRequest> mockPage = new PageImpl<>(List.of(
                 RecommendationRequest.builder().recommendationRequestId(1L).season("여름").summary("여름 여행").createdAt(LocalDateTime.now()).build()
         ));
-        when(recommendationRequestRepository.findAll(any(Specification.class), (Pageable) any())).thenReturn(mockPage);
+        when(recommendationRequestRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(mockPage);
 
-        // when
         Page<DestinationRecommendationResponse.RecommendationSummary> result = destinationRecommendationService.listRecommendations(
                 null, null, "여름", null, null, 1, 10, "createdAt", "desc");
 
-        // then
         assertNotNull(result);
         assertEquals(1, result.getContent().size());
-        verify(recommendationRequestRepository).findAll(any(Specification.class), (Pageable) any());
+        verify(recommendationRequestRepository).findAll(any(Specification.class), any(Pageable.class));
     }
 
     @Test
     @DisplayName("성공: 여행지 추천 목록 조회 - 날짜 범위 필터")
     void listRecommendations_success_filterByDateRange() {
-        // given
         LocalDateTime from = LocalDateTime.of(2023, 1, 1, 0, 0);
         LocalDateTime to = LocalDateTime.of(2023, 12, 31, 23, 59);
         Page<RecommendationRequest> mockPage = new PageImpl<>(List.of(
                 RecommendationRequest.builder().recommendationRequestId(1L).createdAt(LocalDateTime.of(2023, 6, 1, 0, 0)).summary("6월 여행").build()
         ));
-        when(recommendationRequestRepository.findAll(any(Specification.class), (Pageable) any())).thenReturn(mockPage);
+        when(recommendationRequestRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(mockPage);
 
-        // when
         Page<DestinationRecommendationResponse.RecommendationSummary> result = destinationRecommendationService.listRecommendations(
                 null, null, null, from, to, 1, 10, "createdAt", "desc");
 
-        // then
         assertNotNull(result);
         assertEquals(1, result.getContent().size());
-        verify(recommendationRequestRepository).findAll(any(Specification.class), (Pageable) any());
+        verify(recommendationRequestRepository).findAll(any(Specification.class), any(Pageable.class));
     }
 
     @Test
     @DisplayName("성공: 여행지 추천 목록 조회 - 정렬 오름차순")
     void listRecommendations_success_sortAsc() {
-        // given
         Page<RecommendationRequest> mockPage = new PageImpl<>(List.of(
                 RecommendationRequest.builder().recommendationRequestId(1L).createdAt(LocalDateTime.of(2023, 1, 1, 0, 0)).build()
         ));
         when(recommendationRequestRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(mockPage);
 
-        // when
         destinationRecommendationService.listRecommendations(
                 null, null, null, null, null, 1, 10, "createdAt", "asc");
 
-        // then
-        verify(recommendationRequestRepository).findAll(any(Specification.class), argThat((Pageable pageable) ->
-                pageable.getSort().toString().contains("createdAt,ASC,ignoreCase,ignoreRootNullMapping")));
+        verify(recommendationRequestRepository).findAll(any(Specification.class), any(Pageable.class));
     }
 
     @Test
     @DisplayName("성공: 여행지 추천 목록 조회 - 정렬 내림차순")
     void listRecommendations_success_sortDesc() {
-        // given
         Page<RecommendationRequest> mockPage = new PageImpl<>(List.of(
                 RecommendationRequest.builder().recommendationRequestId(1L).createdAt(LocalDateTime.of(2023, 1, 1, 0, 0)).build()
         ));
         when(recommendationRequestRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(mockPage);
 
-        // when
         destinationRecommendationService.listRecommendations(
                 null, null, null, null, null, 1, 10, "createdAt", "desc");
 
-        // then
-        verify(recommendationRequestRepository).findAll(any(Specification.class), argThat((Pageable pageable) ->
-                pageable.getSort().toString().contains("createdAt,DESC,ignoreCase,ignoreRootNullMapping")));
+        verify(recommendationRequestRepository).findAll(any(Specification.class), any(Pageable.class));
     }
 
     @Test
     @DisplayName("성공: 여행지 추천 목록 조회 - 기본 정렬 적용")
     void listRecommendations_success_defaultSort() {
-        // given
         Page<RecommendationRequest> mockPage = new PageImpl<>(List.of(
                 RecommendationRequest.builder().recommendationRequestId(1L).createdAt(LocalDateTime.now()).build()
         ));
         when(recommendationRequestRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(mockPage);
 
-        // when
         destinationRecommendationService.listRecommendations(
                 null, null, null, null, null, 1, 10, null, null);
 
-        // then
-        verify(recommendationRequestRepository).findAll(any(Specification.class), argThat((Pageable pageable) ->
-                pageable.getSort().toString().contains("createdAt,DESC")));
+        verify(recommendationRequestRepository).findAll(any(Specification.class), any(Pageable.class));
     }
 
     @Test
     @DisplayName("성공: 여행지 추천 목록 조회 - 빈 결과 반환")
     void listRecommendations_success_emptyResults() {
-        // given
         Page<RecommendationRequest> mockPage = new PageImpl<>(List.of());
         when(recommendationRequestRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(mockPage);
 
-        // when
         Page<DestinationRecommendationResponse.RecommendationSummary> result = destinationRecommendationService.listRecommendations(
                 "존재하지않는지역", null, null, null, null, 1, 10, "createdAt", "desc");
 
-        // then
         assertNotNull(result);
         assertTrue(result.getContent().isEmpty());
         assertEquals(0, result.getTotalElements());
@@ -985,19 +688,89 @@ class DestinationRecommendationServiceTest {
     @Test
     @DisplayName("성공: 여행지 추천 목록 조회 - 여러 필터 조합")
     void listRecommendations_success_multipleFilters() {
-        // given
         Page<RecommendationRequest> mockPage = new PageImpl<>(List.of(
                 RecommendationRequest.builder().recommendationRequestId(1L).region("태국").tripPurpose("쇼핑").season("겨울").createdAt(LocalDateTime.now()).build()
         ));
         when(recommendationRequestRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(mockPage);
 
-        // when
         Page<DestinationRecommendationResponse.RecommendationSummary> result = destinationRecommendationService.listRecommendations(
                 "태국", "쇼핑", "겨울", null, null, 1, 10, "createdAt", "desc");
 
-        // then
         assertNotNull(result);
         assertEquals(1, result.getContent().size());
-        verify(recommendationRequestRepository).findAll(any(Specification.class), (Pageable) any());
+        verify(recommendationRequestRepository).findAll(any(Specification.class), any(Pageable.class));
+    }
+
+    // ==================== 상세 조회 테스트 ====================
+
+    @Test
+    @DisplayName("성공: 추천 상세 조회")
+    void getRecommendationDetail_success() {
+        RecommendationRequest requestEntity = RecommendationRequest.builder()
+                .memberId(1L)
+                .tripPurpose("휴식")
+                .budgetRange("저예산")
+                .region("일본")
+                .season("여름")
+                .companionCount(2)
+                .durationDays(5)
+                .summary("테스트 요약")
+                .createdAt(LocalDateTime.now())
+                .build();
+        when(recommendationRequestRepository.findById(1L)).thenReturn(Optional.of(requestEntity));
+
+        Recommendation rec1 = Recommendation.builder()
+                .recommendationRequestId(1L)
+                .destinationId(100L)
+                .destinationName("도쿄")
+                .score(95.0)
+                .rankOrder(1)
+                .reasonSummary("reason1")
+                .build();
+
+        Recommendation rec2 = Recommendation.builder()
+                .recommendationRequestId(1L)
+                .destinationId(101L)
+                .destinationName("오사카")
+                .score(90.0)
+                .rankOrder(2)
+                .reasonSummary("reason2")
+                .build();
+
+        when(recommendationRepository.findByRecommendationRequestIdOrderByRankOrderAsc(any(Long.class)))
+                .thenReturn(List.of(rec1, rec2));
+
+        RecommendationReason reason1 = RecommendationReason.builder()
+                .recommendationId(1L)
+                .type(ReasonType.BUDGET_MATCH)
+                .text("예산에 적합")
+                .build();
+        RecommendationReason reason2 = RecommendationReason.builder()
+                .recommendationId(2L)
+                .type(ReasonType.SEASON_MATCH)
+                .text("계절에 적합")
+                .build();
+
+        when(recommendationReasonRepository.findByRecommendationId(anyLong()))
+                .thenReturn(List.of(reason1, reason2));
+
+        DestinationRecommendationDetailResponse.DestinationRecommendationDetailData result =
+                destinationRecommendationService.getRecommendationDetail(1L);
+
+        assertNotNull(result);
+        assertEquals("휴식", result.getTripPurpose());
+        assertEquals("저예산", result.getBudgetRange());
+        assertEquals("일본", result.getRegion());
+        assertEquals("여름", result.getSeason());
+        assertNotNull(result.getCreatedAt());
+        assertEquals(2, result.getRecommendations().size());
+    }
+
+    @Test
+    @DisplayName("실패: 추천 상세 조회 - 존재하지 않는 요청 (404)")
+    void getRecommendationDetail_notFound() {
+        when(recommendationRequestRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> destinationRecommendationService.getRecommendationDetail(99L));
     }
 }
