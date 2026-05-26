@@ -33,7 +33,8 @@ llm_cfg = {
     "model_server": "http://localhost:11434/v1",
     "api_key": "EMPTY",
     "generate_cfg": {
-        "top_p": 0.8,
+        "top_p": 0.1,
+        "temperature": 0.0,
         "use_raw_api": "true",
         'max_input_tokens': 58000,
         # 'extra_body': {'enable_thinking': False}
