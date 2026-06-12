@@ -80,15 +80,15 @@ class DestinationRecommendationRepositoryTest {
         // then - Recommendation IDs 검증
         List<Recommendation> allRecommendations = recommendationRepository.findAll();
         assertThat(allRecommendations).hasSize(3);
-        assertThat(rec1.getRecommendationId()).isNotNull();
-        assertThat(rec2.getRecommendationId()).isNotNull();
-        assertThat(rec3.getRecommendationId()).isNotNull();
+        assertThat(rec1.getId()).isNotNull();
+        assertThat(rec2.getId()).isNotNull();
+        assertThat(rec3.getId()).isNotNull();
 
         // then - 1:N 연관관계 검증 (Recommendation의 recommendationRequestId가 Request의 ID와 일치)
         Long requestId = savedRequest.getRecommendationRequestId();
-        rec1 = recommendationRepository.findById(rec1.getRecommendationId()).orElseThrow();
-        rec2 = recommendationRepository.findById(rec2.getRecommendationId()).orElseThrow();
-        rec3 = recommendationRepository.findById(rec3.getRecommendationId()).orElseThrow();
+        rec1 = recommendationRepository.findById(rec1.getId()).orElseThrow();
+        rec2 = recommendationRepository.findById(rec2.getId()).orElseThrow();
+        rec3 = recommendationRepository.findById(rec3.getId()).orElseThrow();
 
         assertThat(rec1.getRecommendationRequestId()).isEqualTo(requestId);
         assertThat(rec2.getRecommendationRequestId()).isEqualTo(requestId);

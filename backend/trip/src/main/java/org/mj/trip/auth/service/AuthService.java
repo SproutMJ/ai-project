@@ -20,6 +20,9 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public LoginResponse login(LoginRequest request) {
+        if (request.getPassword() == null) {
+            throw new IllegalArgumentException("Password cannot be null");
+        }
         // 이메일로 회원 조회 (상태는 ACTIVE만 허용)
         Member member = memberRepository.findByEmailAndStatus(request.getEmail(), MemberStatus.ACTIVE)
                 .orElseThrow(() -> new MemberNotFoundException("회원을 찾을 수 없습니다."));

@@ -1,21 +1,15 @@
 package org.mj.trip.destination.controller;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
-
-import java.time.LocalDateTime;
-import java.util.List;
-
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mj.trip.auth.token.JwtAuthenticationInterceptor;
 import org.mj.trip.common.config.WebConfig;
 import org.mj.trip.common.exception.GlobalExceptionHandler;
+import org.mj.trip.common.exception.ResourceNotFoundException;
 import org.mj.trip.destination.dto.DestinationRecommendationRequest;
 import org.mj.trip.destination.dto.DestinationRecommendationResponse;
 import org.mj.trip.destination.service.DestinationRecommendationService;
@@ -28,11 +22,16 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.result.MockMvcResultHandlers;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
+import java.time.LocalDateTime;
+import java.util.List;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @DisplayName("DestinationRecommendationController 테스트")
 @WebMvcTest(DestinationRecommendationController.class)
@@ -83,20 +82,6 @@ class DestinationRecommendationControllerTest {
                 .score(95.5)
                 .rankOrder(1)
                 .reasonSummary("도쿄는 휴식과 2명의 동반자와 5일 일정에 적합합니다.")
-                .reasons(List.of(
-                        DestinationRecommendationResponse.Reason.builder()
-                                .type("BUDGET_MATCH")
-                                .text("예산 범위 (저예산) 내에서 충분히 구성 가능합니다.")
-                                .build(),
-                        DestinationRecommendationResponse.Reason.builder()
-                                .type("SEASON_MATCH")
-                                .text("여름 계절에 적합한 활동과 경관을 즐길 수 있습니다.")
-                                .build(),
-                        DestinationRecommendationResponse.Reason.builder()
-                                .type("DURATION_MATCH")
-                                .text("5일 일정으로 충분히 즐길 수 있는 코스입니다.")
-                                .build()
-                ))
                 .build();
 
         DestinationRecommendationResponse response = DestinationRecommendationResponse.builder()
@@ -110,15 +95,14 @@ class DestinationRecommendationControllerTest {
 
         // when & then
         mockMvc.perform(post("/v1/destination-recommendations")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.recommendationRequestId").value(1))
                 .andExpect(jsonPath("$.data.recommendations[0].destinationName").value("도쿄"))
                 .andExpect(jsonPath("$.data.recommendations[0].score").value(95.5))
-                .andExpect(jsonPath("$.data.recommendations[0].rankOrder").value(1))
-                .andExpect(jsonPath("$.data.recommendations[0].reasons.length()").value(3));
+                .andExpect(jsonPath("$.data.recommendations[0].rankOrder").value(1));
     }
 
     @Test
@@ -137,8 +121,8 @@ class DestinationRecommendationControllerTest {
 
         // when & then
         mockMvc.perform(post("/v1/destination-recommendations")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
@@ -161,8 +145,8 @@ class DestinationRecommendationControllerTest {
 
         // when & then
         mockMvc.perform(post("/v1/destination-recommendations")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
@@ -185,8 +169,8 @@ class DestinationRecommendationControllerTest {
 
         // when & then
         mockMvc.perform(post("/v1/destination-recommendations")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
@@ -209,8 +193,8 @@ class DestinationRecommendationControllerTest {
 
         // when & then
         mockMvc.perform(post("/v1/destination-recommendations")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
@@ -234,8 +218,8 @@ class DestinationRecommendationControllerTest {
 
         // when & then
         mockMvc.perform(post("/v1/destination-recommendations")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
@@ -259,8 +243,8 @@ class DestinationRecommendationControllerTest {
 
         // when & then
         mockMvc.perform(post("/v1/destination-recommendations")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
@@ -284,8 +268,8 @@ class DestinationRecommendationControllerTest {
 
         // when & then
         mockMvc.perform(post("/v1/destination-recommendations")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
@@ -309,8 +293,8 @@ class DestinationRecommendationControllerTest {
 
         // when & then
         mockMvc.perform(post("/v1/destination-recommendations")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
@@ -333,8 +317,8 @@ class DestinationRecommendationControllerTest {
 
         // when & then
         mockMvc.perform(post("/v1/destination-recommendations")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
@@ -357,8 +341,8 @@ class DestinationRecommendationControllerTest {
 
         // when & then
         mockMvc.perform(post("/v1/destination-recommendations")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
@@ -390,8 +374,8 @@ class DestinationRecommendationControllerTest {
 
         // when & then
         mockMvc.perform(post("/v1/destination-recommendations")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.success").value(true));
     }
@@ -421,8 +405,8 @@ class DestinationRecommendationControllerTest {
 
         // when & then
         mockMvc.perform(post("/v1/destination-recommendations")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.success").value(true));
     }
@@ -452,8 +436,8 @@ class DestinationRecommendationControllerTest {
 
         // when & then
         mockMvc.perform(post("/v1/destination-recommendations")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.success").value(true));
     }
@@ -483,8 +467,8 @@ class DestinationRecommendationControllerTest {
 
         // when & then
         mockMvc.perform(post("/v1/destination-recommendations")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.success").value(true));
     }
@@ -543,7 +527,7 @@ class DestinationRecommendationControllerTest {
 
         // when & then
         mockMvc.perform(get("/v1/destination-recommendations")
-                        .contentType(MediaType.APPLICATION_JSON))
+                .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.length()").value(3))
@@ -585,8 +569,8 @@ class DestinationRecommendationControllerTest {
 
         // when & then
         mockMvc.perform(get("/v1/destination-recommendations")
-                        .param("region", "일본")
-                        .contentType(MediaType.APPLICATION_JSON))
+                .param("region", "일본")
+                .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.length()").value(1))
@@ -624,8 +608,8 @@ class DestinationRecommendationControllerTest {
 
         // when & then
         mockMvc.perform(get("/v1/destination-recommendations")
-                        .param("tripPurpose", "맛집탐방")
-                        .contentType(MediaType.APPLICATION_JSON))
+                .param("tripPurpose", "맛집탐방")
+                .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.length()").value(1))
@@ -662,8 +646,8 @@ class DestinationRecommendationControllerTest {
 
         // when & then
         mockMvc.perform(get("/v1/destination-recommendations")
-                        .param("season", "여름")
-                        .contentType(MediaType.APPLICATION_JSON))
+                .param("season", "여름")
+                .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.length()").value(1))
@@ -700,10 +684,10 @@ class DestinationRecommendationControllerTest {
 
         // when & then
         mockMvc.perform(get("/v1/destination-recommendations")
-                        .param("region", "일본")
-                        .param("tripPurpose", "쇼핑")
-                        .param("season", "여름")
-                        .contentType(MediaType.APPLICATION_JSON))
+                .param("region", "일본")
+                .param("tripPurpose", "쇼핑")
+                .param("season", "여름")
+                .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.length()").value(1))
@@ -743,9 +727,9 @@ class DestinationRecommendationControllerTest {
 
         // when & then
         mockMvc.perform(get("/v1/destination-recommendations")
-                        .param("createdFrom", "2024-01-01T00:00:00")
-                        .param("createdTo", "2024-12-31T23:59:00")
-                        .contentType(MediaType.APPLICATION_JSON))
+                .param("createdFrom", "2024-01-01T00:00:00")
+                .param("createdTo", "2024-12-31T23:59:00")
+                .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.length()").value(1))
@@ -768,7 +752,7 @@ class DestinationRecommendationControllerTest {
 
         // when & then
         mockMvc.perform(get("/v1/destination-recommendations")
-                        .contentType(MediaType.APPLICATION_JSON))
+                .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data").isEmpty())
@@ -816,9 +800,9 @@ class DestinationRecommendationControllerTest {
 
         // when & then
         mockMvc.perform(get("/v1/destination-recommendations")
-                        .param("sort", "createdAt")
-                        .param("order", "asc")
-                        .contentType(MediaType.APPLICATION_JSON))
+                .param("sort", "createdAt")
+                .param("order", "asc")
+                .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.length()").value(2))
@@ -867,13 +851,43 @@ class DestinationRecommendationControllerTest {
 
         // when & then
         mockMvc.perform(get("/v1/destination-recommendations")
-                        .param("sort", "recommendationRequestId")
-                        .param("order", "desc")
-                        .contentType(MediaType.APPLICATION_JSON))
+                .param("sort", "recommendationRequestId")
+                .param("order", "desc")
+                .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.length()").value(2))
                 .andExpect(jsonPath("$.data[0].recommendationRequestId").value(100))
                 .andExpect(jsonPath("$.data[1].recommendationRequestId").value(10));
+    }
+
+    // ================== deleteRecommendation 테스트 ====================
+
+    @Test
+    @DisplayName("여행지 추천 삭제 성공 - 204 No Content")
+    void deleteRecommendation_success() throws Exception {
+        // given
+        doNothing().when(destinationRecommendationService).deleteRecommendationRequest(anyLong());
+
+        // when & then
+        mockMvc.perform(delete("/v1/destination-recommendations/{recommendationRequestId}", 1L))
+                .andExpect(status().isNoContent());
+
+        verify(destinationRecommendationService, times(1)).deleteRecommendationRequest(1L);
+    }
+
+    @Test
+    @DisplayName("여행지 추천 삭제 실패 - 404 Not Found")
+    void deleteRecommendation_notFound() throws Exception {
+        // given
+        doThrow(new ResourceNotFoundException("RecommendationRequest not found: 999L"))
+                .when(destinationRecommendationService).deleteRecommendationRequest(999L);
+
+        // when & then
+        mockMvc.perform(delete("/v1/destination-recommendations/{recommendationRequestId}", 999L))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("RESOURCE_NOT_FOUND"))
+                .andExpect(jsonPath("$.error.message").exists());
     }
 }

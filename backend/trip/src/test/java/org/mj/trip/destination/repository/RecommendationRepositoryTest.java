@@ -34,7 +34,7 @@ class RecommendationRepositoryTest {
         Recommendation saved = recommendationRepository.save(recommendation);
 
         // then
-        assertNotNull(saved.getRecommendationId());
+        assertNotNull(saved.getId());
         assertEquals("도쿄", saved.getDestinationName());
         assertEquals(95.5, saved.getScore());
     }

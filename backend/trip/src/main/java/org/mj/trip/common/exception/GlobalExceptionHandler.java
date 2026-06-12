@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.List;
 
@@ -58,5 +59,21 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleIllegalArgumentException(IllegalArgumentException e) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error("INVALID_REQUEST", e.getMessage()));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTypeMismatchException(MethodArgumentTypeMismatchException ex) {
+        // 에러 코드 및 메시지 정의
+        String errorCode = "INVALID_REQUEST";
+        String errorMessage = "요청 값의 타입이 올바르지 않습니다.";
+
+        // ApiResponse를 사용하여 표준 에러 응답 생성
+        ApiResponse<Void> errorResponse = ApiResponse.failure(
+                errorCode,
+                errorMessage
+        );
+
+        // 400 Bad Request 반환
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
     }
 }

@@ -2,16 +2,12 @@ package org.mj.trip.destination.service;
 
 import lombok.RequiredArgsConstructor;
 import org.mj.trip.common.exception.ResourceNotFoundException;
-import org.mj.trip.destination.domain.ReasonType;
 import org.mj.trip.destination.domain.Recommendation;
-import org.mj.trip.destination.domain.RecommendationReason;
 import org.mj.trip.destination.domain.RecommendationRequest;
 import org.mj.trip.destination.dto.DestinationRecommendationDetailResponse.DestinationRecommendationDetailData;
 import org.mj.trip.destination.dto.DestinationRecommendationDetailResponse.DestinationRecommendationDetailData.RecommendationItem;
-import org.mj.trip.destination.dto.DestinationRecommendationDetailResponse.DestinationRecommendationDetailData.ReasonDetail;
 import org.mj.trip.destination.dto.DestinationRecommendationRequest;
 import org.mj.trip.destination.dto.DestinationRecommendationResponse;
-import org.mj.trip.destination.repository.RecommendationReasonRepository;
 import org.mj.trip.destination.repository.RecommendationRepository;
 import org.mj.trip.destination.repository.RecommendationRequestRepository;
 import org.springframework.data.domain.Page;
@@ -24,7 +20,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
@@ -34,7 +29,6 @@ public class DestinationRecommendationService {
 
     private final RecommendationRequestRepository recommendationRequestRepository;
     private final RecommendationRepository recommendationRepository;
-    private final RecommendationReasonRepository recommendationReasonRepository;
 
     @Transactional
     public DestinationRecommendationResponse createRecommendation(Long memberId, DestinationRecommendationRequest request) {
@@ -42,7 +36,7 @@ public class DestinationRecommendationService {
         if (request.getCompanionCount() != null && request.getCompanionCount() <= 0) {
             throw new IllegalArgumentException("동반자 수는 1명 이상이어야 합니다.");
         }
-        
+
         // Validate durationDays
         if (request.getDurationDays() != null && request.getDurationDays() <= 0) {
             throw new IllegalArgumentException("여행 기간은 1일 이상이어야 합니다.");
@@ -74,31 +68,16 @@ public class DestinationRecommendationService {
         // 생성된 추천 목록 저장 (ID 발급을 위해 필수)
         recommendations = recommendationRepository.saveAll(recommendations).stream().toList();
 
-        // 3. 추천 이유 생성
-        for (Recommendation recommendation : recommendations) {
-            List<RecommendationReason> reasons = generateReasons(recommendation.getRecommendationId(), request);
-            recommendationReasonRepository.saveAll(reasons);
-        }
-
         // 4. 응답 생성
         List<DestinationRecommendationResponse.Recommendation> responseRecommendations = recommendations.stream()
                 .map(rec -> {
-                    List<RecommendationReason> reasons = recommendationReasonRepository.findByRecommendationId(rec.getRecommendationId());
-                    List<DestinationRecommendationResponse.Reason> responseReasons = (reasons != null ? reasons : Collections.<RecommendationReason>emptyList()).stream()
-                            .map(reason -> DestinationRecommendationResponse.Reason.builder()
-                                    .type(reason.getType().name())
-                                    .text(reason.getText())
-                                    .build())
-                            .toList();
-
                     return DestinationRecommendationResponse.Recommendation.builder()
-                            .recommendationId(rec.getRecommendationId())
+                            .recommendationId(rec.getId())
                             .destinationId(rec.getDestinationId())
                             .destinationName(rec.getDestinationName())
                             .score(rec.getScore())
                             .rankOrder(rec.getRankOrder())
                             .reasonSummary(rec.getReasonSummary())
-                            .reasons(responseReasons)
                             .build();
                 })
                 .toList();
@@ -232,22 +211,13 @@ public class DestinationRecommendationService {
         // 3. 응답 매핑
         List<RecommendationItem> responseRecommendations = recommendations.stream()
                 .map(rec -> {
-                    List<RecommendationReason> reasons = recommendationReasonRepository.findByRecommendationId(rec.getRecommendationId());
-                    List<ReasonDetail> responseReasons = (reasons != null ? reasons : Collections.<RecommendationReason>emptyList()).stream()
-                            .map(reason -> ReasonDetail.builder()
-                                    .type(reason.getType().name())
-                                    .text(reason.getText())
-                                    .build())
-                            .toList();
-
                     return RecommendationItem.builder()
-                            .recommendationId(rec.getRecommendationId())
+                            .recommendationId(rec.getId())
                             .destinationId(rec.getDestinationId())
                             .destinationName(rec.getDestinationName())
                             .score(rec.getScore())
                             .rankOrder(rec.getRankOrder())
                             .reasonSummary(rec.getReasonSummary())
-                            .reasons(responseReasons)
                             .build();
                 })
                 .toList();
@@ -262,30 +232,16 @@ public class DestinationRecommendationService {
                 .build();
     }
 
-    private List<RecommendationReason> generateReasons(Long recommendationId, DestinationRecommendationRequest request) {
-        List<RecommendationReason> reasons = new ArrayList<>();
+    @Transactional
+    public void deleteRecommendationRequest(Long recommendationRequestId) {
+        RecommendationRequest recommendationRequest = recommendationRequestRepository.findById(recommendationRequestId)
+                .orElseThrow(() -> new ResourceNotFoundException("RecommendationRequest not found: " + recommendationRequestId));
 
-        // 예산 매칭
-        reasons.add(RecommendationReason.builder()
-                .recommendationId(recommendationId)
-                .type(ReasonType.BUDGET_MATCH)
-                .text("예산 범위 (" + request.getBudgetRange() + ") 내에서 충분히 구성 가능합니다.")
-                .build());
+        // Delete associated Recommendation records
+        recommendationRepository.deleteByRecommendationRequestId(recommendationRequestId);
 
-        // 계절 매칭
-        reasons.add(RecommendationReason.builder()
-                .recommendationId(recommendationId)
-                .type(ReasonType.SEASON_MATCH)
-                .text(request.getSeason() + " 계절에 적합한 활동과 경관을 즐길 수 있습니다.")
-                .build());
-
-        // 일정 매칭
-        reasons.add(RecommendationReason.builder()
-                .recommendationId(recommendationId)
-                .type(ReasonType.DURATION_MATCH)
-                .text(request.getDurationDays() + "일 일정으로 충분히 즐길 수 있는 코스입니다.")
-                .build());
-
-        return reasons;
+        // Delete the RecommendationRequest record
+        recommendationRequestRepository.delete(recommendationRequest);
     }
+
 }

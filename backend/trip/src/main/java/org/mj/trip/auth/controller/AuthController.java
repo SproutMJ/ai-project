@@ -6,7 +6,10 @@ import org.mj.trip.auth.dto.LoginResponse;
 import org.mj.trip.auth.service.AuthService;
 import org.mj.trip.common.dto.ApiResponse;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/v1/auth")

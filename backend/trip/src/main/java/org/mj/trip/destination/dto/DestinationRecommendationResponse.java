@@ -21,7 +21,7 @@ public class DestinationRecommendationResponse {
         private Long recommendationRequestId;
         private String summary;
         private LocalDateTime createdAt;
-        
+
         private String region;
         private String tripPurpose;
         private String budgetRange;
@@ -39,14 +39,6 @@ public class DestinationRecommendationResponse {
         private Double score;
         private Integer rankOrder;
         private String reasonSummary;
-        private List<Reason> reasons;
-    }
-
-    @Getter
-    @Builder
-    public static class Reason {
-        private String type;
-        private String text;
     }
 
     @Builder

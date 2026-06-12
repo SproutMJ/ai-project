@@ -29,11 +29,15 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class MemberServiceTest {
 
-    @Mock private MemberRepository memberRepository;
-    @Mock private MemberTravelStyleRepository memberTravelStyleRepository;
-    @Mock private TravelStyleRepository travelStyleRepository;
+    @Mock
+    private MemberRepository memberRepository;
+    @Mock
+    private MemberTravelStyleRepository memberTravelStyleRepository;
+    @Mock
+    private TravelStyleRepository travelStyleRepository;
 
-    @InjectMocks private MemberService memberService;
+    @InjectMocks
+    private MemberService memberService;
 
     @Test
     @DisplayName("회원가입 성공")

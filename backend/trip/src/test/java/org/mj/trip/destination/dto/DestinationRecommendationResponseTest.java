@@ -18,15 +18,6 @@ class DestinationRecommendationResponseTest {
         Long recommendationRequestId = 1L;
         LocalDateTime createdAt = LocalDateTime.of(2023, 10, 1, 12, 0, 0);
 
-        DestinationRecommendationResponse.Reason reason1 = DestinationRecommendationResponse.Reason.builder()
-                .type("BUDGET_MATCH")
-                .text("예산 범위 내에서 구성 가능합니다.")
-                .build();
-
-        DestinationRecommendationResponse.Reason reason2 = DestinationRecommendationResponse.Reason.builder()
-                .type("SEASON_MATCH")
-                .text("여름에 적합합니다.")
-                .build();
 
         DestinationRecommendationResponse.Recommendation recommendation = DestinationRecommendationResponse.Recommendation.builder()
                 .recommendationId(1L)
@@ -35,7 +26,6 @@ class DestinationRecommendationResponseTest {
                 .score(95.5)
                 .rankOrder(1)
                 .reasonSummary("도쿄는 쇼핑을 즐기기 좋습니다.")
-                .reasons(List.of(reason1, reason2))
                 .build();
 
         // when
@@ -54,9 +44,6 @@ class DestinationRecommendationResponseTest {
         assertEquals(95.5, response.getRecommendations().get(0).getScore());
         assertEquals(1, response.getRecommendations().get(0).getRankOrder());
         assertEquals("도쿄는 쇼핑을 즐기기 좋습니다.", response.getRecommendations().get(0).getReasonSummary());
-        assertEquals(2, response.getRecommendations().get(0).getReasons().size());
-        assertEquals("BUDGET_MATCH", response.getRecommendations().get(0).getReasons().get(0).getType());
-        assertEquals("예산 범위 내에서 구성 가능합니다.", response.getRecommendations().get(0).getReasons().get(0).getText());
     }
 
     @Test
@@ -116,7 +103,6 @@ class DestinationRecommendationResponseTest {
                 .score(95.5)
                 .rankOrder(1)
                 .reasonSummary("도쿄 추천")
-                .reasons(List.of())
                 .build();
 
         // when
@@ -129,7 +115,6 @@ class DestinationRecommendationResponseTest {
         // then
         assertNotNull(response);
         assertEquals(1, response.getRecommendations().size());
-        assertTrue(response.getRecommendations().get(0).getReasons().isEmpty());
     }
 
     @Test
@@ -154,6 +139,5 @@ class DestinationRecommendationResponseTest {
 
         // then
         assertNotNull(response);
-        assertNull(response.getRecommendations().get(0).getReasons());
     }
 }

@@ -1,9 +1,5 @@
 package org.mj.trip.destination.service;
 
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
-
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -11,12 +7,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mj.trip.common.exception.ResourceNotFoundException;
 import org.mj.trip.destination.domain.ReasonType;
 import org.mj.trip.destination.domain.Recommendation;
-import org.mj.trip.destination.domain.RecommendationReason;
 import org.mj.trip.destination.domain.RecommendationRequest;
 import org.mj.trip.destination.dto.DestinationRecommendationDetailResponse;
 import org.mj.trip.destination.dto.DestinationRecommendationRequest;
 import org.mj.trip.destination.dto.DestinationRecommendationResponse;
-import org.mj.trip.destination.repository.RecommendationReasonRepository;
 import org.mj.trip.destination.repository.RecommendationRepository;
 import org.mj.trip.destination.repository.RecommendationRequestRepository;
 import org.mockito.Mock;
@@ -28,19 +22,12 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.Mockito.atLeast;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 @DisplayName("DestinationRecommendationService 테스트")
 @ExtendWith(MockitoExtension.class)
@@ -53,24 +40,19 @@ class DestinationRecommendationServiceTest {
     @Mock
     private RecommendationRepository recommendationRepository;
 
-    @Mock
-    private RecommendationReasonRepository recommendationReasonRepository;
-
     private DestinationRecommendationService destinationRecommendationService;
 
     @BeforeEach
     void setUp() {
         recommendationRequestRepository = mock(RecommendationRequestRepository.class);
         recommendationRepository = mock(RecommendationRepository.class);
-        recommendationReasonRepository = mock(RecommendationReasonRepository.class);
 
         doAnswer(invocation -> invocation.getArgument(0))
                 .when(recommendationRepository).saveAll(any(List.class));
 
         destinationRecommendationService = new DestinationRecommendationService(
                 recommendationRequestRepository,
-                recommendationRepository,
-                recommendationReasonRepository
+                recommendationRepository
         );
     }
 
@@ -118,7 +100,6 @@ class DestinationRecommendationServiceTest {
                 memberId, "휴식", "저예산", "일본", "여름", 2, 5
         );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
-        doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
         DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(memberId, request);
 
@@ -140,7 +121,6 @@ class DestinationRecommendationServiceTest {
                 1L, "쇼핑", "고예산", "일본", "봄", 3, 7
         );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
-        doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
         DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(1L, request);
 
@@ -160,7 +140,6 @@ class DestinationRecommendationServiceTest {
                 1L, "액티비티", "중예산", "태국", "겨울", 4, 10
         );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
-        doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
         DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(1L, request);
 
@@ -180,7 +159,6 @@ class DestinationRecommendationServiceTest {
                 1L, "문화체험", "저예산", "베트남", "가을", 1, 14
         );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
-        doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
         DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(1L, request);
 
@@ -200,7 +178,6 @@ class DestinationRecommendationServiceTest {
                 1L, "맛집탐방", "중예산", "국내", "여름", 2, 3
         );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
-        doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
         DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(1L, request);
 
@@ -220,7 +197,6 @@ class DestinationRecommendationServiceTest {
                 1L, "휴식", "저예산", "일본", "여름", 2, 5
         );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
-        doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
         DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(1L, request);
 
@@ -239,7 +215,6 @@ class DestinationRecommendationServiceTest {
                 1L, "쇼핑", "저예산", "일본", "여름", 3, 7
         );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
-        doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
         DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(1L, request);
 
@@ -258,7 +233,6 @@ class DestinationRecommendationServiceTest {
                 1L, "휴식", "저예산", "일본", "여름", 5, 10
         );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
-        doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
         DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(1L, request);
 
@@ -277,7 +251,6 @@ class DestinationRecommendationServiceTest {
                 1L, "휴식", "저예산", "일본", "여름", 2, 15
         );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
-        doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
         DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(1L, request);
 
@@ -296,7 +269,6 @@ class DestinationRecommendationServiceTest {
                 1L, "휴식", "저예산", "일본", "여름", 2, 5
         );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
-        doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
         DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(1L, request);
 
@@ -317,7 +289,6 @@ class DestinationRecommendationServiceTest {
                 1L, "휴식", "저예산", "일본", "여름", 2, 5
         );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
-        doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
         DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(1L, request);
 
@@ -342,12 +313,10 @@ class DestinationRecommendationServiceTest {
                 1L, "휴식", "저예산", "일본", "여름", 2, 5
         );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
-        doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(any());
 
         destinationRecommendationService.createRecommendation(1L, request);
 
         verify(recommendationRequestRepository, times(1)).save(any(RecommendationRequest.class));
-        verify(recommendationReasonRepository, atLeast(1)).findByRecommendationId(any());
     }
 
     @Test
@@ -365,29 +334,6 @@ class DestinationRecommendationServiceTest {
         assertThrows(org.springframework.dao.DataAccessException.class, () ->
                 destinationRecommendationService.createRecommendation(memberId, request));
 
-        verify(recommendationReasonRepository, never()).saveAll(any());
-        verify(recommendationReasonRepository, never()).findByRecommendationId(anyLong());
-    }
-
-    @Test
-    @DisplayName("실패: RecommendationReason 저장 시 DataAccessException 발생")
-    void createRecommendation_failure_recommendationReasonRepositoryException() {
-        Long memberId = 1L;
-        DestinationRecommendationRequest request = createRequest(
-                "휴식", List.of(1L), "저예산", "일본", "여름", 2, 5
-        );
-
-        RecommendationRequest savedRequest = createSavedRequest(
-                memberId, "휴식", "저예산", "일본", "여름", 2, 5
-        );
-        when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
-        doThrow(new org.springframework.dao.DataAccessException("DB error") {
-        }).when(recommendationReasonRepository).saveAll(anyList());
-
-        assertThrows(org.springframework.dao.DataAccessException.class, () ->
-                destinationRecommendationService.createRecommendation(memberId, request));
-
-        verify(recommendationRequestRepository, times(1)).save(any(RecommendationRequest.class));
     }
 
     @Test
@@ -402,7 +348,6 @@ class DestinationRecommendationServiceTest {
                 memberId, "휴식", "저예산", null, "여름", 2, 5
         );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
-        doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
         assertThrows(NullPointerException.class, () ->
                 destinationRecommendationService.createRecommendation(memberId, request));
@@ -426,7 +371,6 @@ class DestinationRecommendationServiceTest {
 
         verify(recommendationRequestRepository, never()).save(any());
         verify(recommendationRepository, never()).saveAll(any());
-        verify(recommendationReasonRepository, never()).saveAll(any());
     }
 
     @Test
@@ -461,7 +405,6 @@ class DestinationRecommendationServiceTest {
                 memberId, "", "저예산", "일본", "여름", 2, 5
         );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
-        doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
         DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(memberId, request);
 
@@ -482,7 +425,6 @@ class DestinationRecommendationServiceTest {
                 memberId, "휴식", "저예산", "일본", "여름", 2, 5
         );
         when(recommendationRequestRepository.save(any(RecommendationRequest.class))).thenReturn(savedRequest);
-        doReturn(List.of()).when(recommendationReasonRepository).findByRecommendationId(anyLong());
 
         DestinationRecommendationResponse response = destinationRecommendationService.createRecommendation(memberId, request);
 
@@ -520,19 +462,15 @@ class DestinationRecommendationServiceTest {
 
         RecommendationRequestRepository mockRequestRepo = mock(RecommendationRequestRepository.class);
         RecommendationRepository mockRecRepo = mock(RecommendationRepository.class);
-        RecommendationReasonRepository mockReasonRepo = mock(RecommendationReasonRepository.class);
 
         when(mockRequestRepo.save(any(RecommendationRequest.class)))
                 .thenReturn(savedRequest);
 
-        doReturn(null).when(mockReasonRepo)
-                .findByRecommendationId(anyLong());
 
         DestinationRecommendationService testService =
                 new DestinationRecommendationService(
                         mockRequestRepo,
-                        mockRecRepo,
-                        mockReasonRepo
+                        mockRecRepo
                 );
 
         DestinationRecommendationResponse response =
@@ -740,20 +678,6 @@ class DestinationRecommendationServiceTest {
         when(recommendationRepository.findByRecommendationRequestIdOrderByRankOrderAsc(any(Long.class)))
                 .thenReturn(List.of(rec1, rec2));
 
-        RecommendationReason reason1 = RecommendationReason.builder()
-                .recommendationId(1L)
-                .type(ReasonType.BUDGET_MATCH)
-                .text("예산에 적합")
-                .build();
-        RecommendationReason reason2 = RecommendationReason.builder()
-                .recommendationId(2L)
-                .type(ReasonType.SEASON_MATCH)
-                .text("계절에 적합")
-                .build();
-
-        when(recommendationReasonRepository.findByRecommendationId(anyLong()))
-                .thenReturn(List.of(reason1, reason2));
-
         DestinationRecommendationDetailResponse.DestinationRecommendationDetailData result =
                 destinationRecommendationService.getRecommendationDetail(1L);
 
@@ -772,5 +696,71 @@ class DestinationRecommendationServiceTest {
         when(recommendationRequestRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class, () -> destinationRecommendationService.getRecommendationDetail(99L));
+    }
+
+    // ==================== 삭제 테스트 ====================
+
+    @Test
+    @DisplayName("성공: 추천 요청 삭제 - 관련 데이터 포함")
+    void deleteRecommendationRequest_success() {
+        // given
+        RecommendationRequest requestEntity = RecommendationRequest.builder()
+                .recommendationRequestId(1L)
+                .memberId(1L)
+                .tripPurpose("휴식")
+                .budgetRange("저예산")
+                .region("일본")
+                .season("여름")
+                .companionCount(2)
+                .durationDays(5)
+                .summary("테스트 요약")
+                .createdAt(LocalDateTime.now())
+                .build();
+        when(recommendationRequestRepository.findById(1L)).thenReturn(Optional.of(requestEntity));
+
+        Recommendation rec1 = Recommendation.builder()
+                .id(1L)
+                .recommendationRequestId(1L)
+                .destinationId(100L)
+                .destinationName("도쿄")
+                .score(95.0)
+                .rankOrder(1)
+                .reasonSummary("reason1")
+                .build();
+
+        Recommendation rec2 = Recommendation.builder()
+                .id(2L)
+                .recommendationRequestId(1L)
+                .destinationId(101L)
+                .destinationName("오사카")
+                .score(90.0)
+                .rankOrder(2)
+                .reasonSummary("reason2")
+                .build();
+
+        when(recommendationRepository.findByRecommendationRequestIdOrderByRankOrderAsc(1L))
+                .thenReturn(List.of(rec1, rec2));
+
+        // when
+        destinationRecommendationService.deleteRecommendationRequest(1L);
+
+        // then
+        verify(recommendationRepository, times(1)).deleteByRecommendationRequestId(1L);
+        verify(recommendationRequestRepository, times(1)).delete(requestEntity);
+    }
+
+    @Test
+    @DisplayName("실패: 추천 요청 삭제 - 존재하지 않는 요청 (404)")
+    void deleteRecommendationRequest_notFound() {
+        // given
+        when(recommendationRequestRepository.findById(99L)).thenReturn(Optional.empty());
+
+        // when & then
+        assertThrows(ResourceNotFoundException.class, () ->
+                destinationRecommendationService.deleteRecommendationRequest(99L));
+
+        verify(recommendationRepository, never()).findByRecommendationRequestIdOrderByRankOrderAsc(anyLong());
+        verify(recommendationRepository, never()).deleteByRecommendationRequestId(anyLong());
+        verify(recommendationRequestRepository, never()).delete((RecommendationRequest) any());
     }
 }
