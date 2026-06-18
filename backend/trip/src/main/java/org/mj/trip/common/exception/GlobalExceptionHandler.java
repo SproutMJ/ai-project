@@ -24,6 +24,12 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error("DUPLICATE_RESOURCE", "자원이 중복됩니다", List.of(detail)));
     }
 
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ApiResponse<Void>> handleGeneralException(Exception e) {
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error("INTERNAL_SERVER_ERROR", "서버 오류가 발생했습니다"));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<Void>> handleValidationException(MethodArgumentNotValidException e) {
         List<ApiResponse.Detail> details = e.getBindingResult().getFieldErrors().stream()
@@ -33,14 +39,9 @@ public class GlobalExceptionHandler {
                         .build())
                 .toList();
 
-        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+        // UNPROCESSABLE_ENTITY(422) -> BAD_REQUEST(400)로 변경
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error("VALIDATION_FAILED", "요청 값이 올바르지 않습니다.", details));
-    }
-
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiResponse<Void>> handleGeneralException(Exception e) {
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error("INTERNAL_SERVER_ERROR", "서버 오류가 발생했습니다"));
     }
 
     @ExceptionHandler(MemberNotFoundException.class)

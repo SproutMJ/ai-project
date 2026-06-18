@@ -1,22 +1,23 @@
+# src/test/resources/application.yml
 spring:
   datasource:
-    url: jdbc:h2:mem:testdb
+    url: jdbc:h2:mem:testdb;MODE=MySQL
     driver-class-name: org.h2.Driver
     username: sa
     password:
   jpa:
     hibernate:
       ddl-auto: create-drop
+    show-sql: true
     properties:
       hibernate:
         format_sql: true
-        show_sql: true
-  h2:
-    console:
-      enabled: true
+  sql:
+    init:
+      mode: never
 
-# JWT Settings (Test)
+# Jwt 설정 (JwtTokenProvider에서 사용)
 jwt:
-  secret: dGVzdC1zZWNyZXQta2V5LWZvci1qd3QtdG9rZW4tZ2VuZXJhdGlvbi1pbi10aGUtdHJpcC1wcm9qZWN0
+  secret: YourBase64EncodedSecretKeyMustBeLongEnough1234567890
   access-token-expiration-msec: 3600000
-  refresh-token-expiration-msec: 604800000
+  refresh-token-expiration-msec: 1209600000
