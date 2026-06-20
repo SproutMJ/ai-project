@@ -25,7 +25,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "route_day_schedule")
+@Table(name = "day_schedule")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor

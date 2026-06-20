@@ -1,6 +1,7 @@
 
 package org.mj.trip.pointrecommendation.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.mj.trip.pointrecommendation.dto.PointRecommendationDetailResponseDto;
@@ -19,7 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/recommendations")
+@RequestMapping("/v1/recommendations")
 @RequiredArgsConstructor
 public class PointRecommendationController {
 
@@ -27,10 +28,10 @@ public class PointRecommendationController {
 
     @PostMapping
     public ResponseEntity<Void> createRecommendation(
-            @RequestBody @Valid PointRecommendationRequestDto requestDto) {
-        // TODO: 실제 사용자 ID(memberId)는 인증 필터 또는 SecurityContext에서 가져와야 합니다.
-        // 예: Long memberId = SecurityUtils.getCurrentUserId();
-        Long memberId = 1L; // 임시 값
+            @RequestBody @Valid PointRecommendationRequestDto requestDto,
+            HttpServletRequest httpRequest) {
+
+        Long memberId = (Long) httpRequest.getAttribute("memberId");
         pointRecommendationService.createRecommendation(memberId, requestDto);
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
@@ -38,11 +39,13 @@ public class PointRecommendationController {
     @GetMapping
     public ResponseEntity<PointRecommendationListResponseDto> listRecommendations(
             @Valid PointRecommendationListRequestDto requestDto) {
-        PointRecommendationListResponseDto response = pointRecommendationService.listRecommendations(
+        Long userId = 1L;
+        PointRecommendationListResponseDto response = pointRecommendationService.recommendationRequests(
                 requestDto.page(),
                 requestDto.size(),
                 requestDto.sort(),
-                requestDto.order()
+                requestDto.order(),
+                userId
         );
         return ResponseEntity.ok(response);
     }

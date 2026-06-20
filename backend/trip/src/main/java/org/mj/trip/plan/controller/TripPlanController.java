@@ -1,18 +1,23 @@
 package org.mj.trip.plan.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.mj.trip.common.dto.ApiResponse;
-import org.mj.trip.plan.dto.TripPlanCreateRequest;
-import org.mj.trip.plan.dto.TripPlanCreateResponse;
-import org.mj.trip.plan.dto.TripPlanDetailResponse;
-import org.mj.trip.plan.dto.TripPlanListResponse;
+import org.mj.trip.plan.dto.request.ScheduleRquestsRequestDto;
+import org.mj.trip.plan.dto.request.TripPlanCreateRequest;
+import org.mj.trip.plan.dto.response.ScheduleRequestsResponseDto;
+import org.mj.trip.plan.dto.response.TripPlanDetailResponse;
 import org.mj.trip.plan.service.TripPlanService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
-import java.time.LocalDate;
-import java.time.LocalDateTime;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @RequiredArgsConstructor
 @RestController
@@ -22,13 +27,14 @@ public class TripPlanController {
     private final TripPlanService tripPlanService;
 
     @PostMapping
-    public ResponseEntity<ApiResponse<TripPlanCreateResponse>> createTripPlan(
-            @Valid @RequestBody TripPlanCreateRequest request) {
+    public ResponseEntity<Void> createTripPlan(
+            @Valid @RequestBody TripPlanCreateRequest request,
+            HttpServletRequest httpRequest) {
 
-        // 인증이 필요한 API이므로 실제 구현 시 @PreAuthorize("isAuthenticated()") 또는 SecurityContext 검증 추가
-        TripPlanCreateResponse response = tripPlanService.createTripPlan(request);
+        Long memberId = (Long) httpRequest.getAttribute("memberId");
+        tripPlanService.createTripPlan(memberId, request);
 
-        return ResponseEntity.status(201).body(ApiResponse.success(response));
+        return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
     @GetMapping("/{tripPlanId}")
@@ -41,32 +47,14 @@ public class TripPlanController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<TripPlanListResponse>> listTripPlans(
-            @RequestParam(required = false) String status,
-            @RequestParam(required = false) String region,
-            @RequestParam(required = false) LocalDate startDateFrom,
-            @RequestParam(required = false) LocalDate startDateTo,
-            @RequestParam(required = false) LocalDateTime createdFrom,
-            @RequestParam(required = false) LocalDateTime createdTo,
-            @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "20") int size,
-            @RequestParam(defaultValue = "createdAt") String sort,
-            @RequestParam(defaultValue = "desc") String order) {
+    public ResponseEntity<ApiResponse<ScheduleRequestsResponseDto>> listTripPlanRequests(
+            @Valid ScheduleRquestsRequestDto scheduleRquestsRequestDto,
+            HttpServletRequest httpRequest) {
 
-        TripPlanListResponse response = tripPlanService.listTripPlans(
-                status,
-                region,
-                startDateFrom,
-                startDateTo,
-                createdFrom,
-                createdTo,
-                page - 1, // API 명세서의 page=1은 0-based index의 0에 해당
-                size,
-                sort,
-                order
-        );
+        Long memberId = (Long) httpRequest.getAttribute("memberId");
+        ScheduleRequestsResponseDto dto = tripPlanService.listTripPlanRequests(memberId, scheduleRquestsRequestDto);
 
-        return ResponseEntity.ok(ApiResponse.success(response));
+        return ResponseEntity.ok(ApiResponse.success(dto));
     }
 
     @DeleteMapping("/{tripPlanId}")

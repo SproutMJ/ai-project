@@ -14,8 +14,11 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.mj.trip.common.entity.BaseTimeEntity;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+
 @Entity
-@Table(name = "recommendation_request")
+@Table(name = "schedule_recommendation_request")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
@@ -32,4 +35,16 @@ public class ScheduleRequest extends BaseTimeEntity {
     @Lob
     @Column(nullable = false)
     private String requestText;
+
+    @Column(nullable = false)
+    LocalDate startDate;
+
+    @Column(nullable = false)
+    LocalDate endDate;
+
+    @Column(nullable = false)
+    String region;
+
+    @Column(nullable = false)
+    BigDecimal budget;
 }

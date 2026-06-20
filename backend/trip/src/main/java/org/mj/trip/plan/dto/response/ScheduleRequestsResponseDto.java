@@ -1,11 +1,11 @@
-package org.mj.trip.pointrecommendation.dto;
+package org.mj.trip.plan.dto.response;
 
 import org.springframework.data.domain.Page;
 
 import java.util.List;
 
-public record PointRecommendationListResponseDto(
-        List<PointRecommendationRequestResponseDto> recommendations,
+public record ScheduleRequestsResponseDto(
+        List<ScheduleRequestResponseDto> scheduleRequests,
         Meta meta
 ) {
     public record Meta(
@@ -24,3 +24,4 @@ public record PointRecommendationListResponseDto(
         }
     }
 }
+

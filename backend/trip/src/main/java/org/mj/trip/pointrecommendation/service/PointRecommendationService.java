@@ -2,6 +2,7 @@
 package org.mj.trip.pointrecommendation.service;
 
 import lombok.RequiredArgsConstructor;
+import org.mj.trip.common.service.AsyncRecommendationService;
 import org.mj.trip.common.exception.ResourceNotFoundException;
 import org.mj.trip.pointrecommendation.domain.PointRecommendation;
 import org.mj.trip.pointrecommendation.domain.PointRecommendationRepository;
@@ -10,6 +11,7 @@ import org.mj.trip.pointrecommendation.domain.PointRecommendationRequestReposito
 import org.mj.trip.pointrecommendation.dto.PointRecommendationDetailResponseDto;
 import org.mj.trip.pointrecommendation.dto.PointRecommendationListResponseDto;
 import org.mj.trip.pointrecommendation.dto.PointRecommendationRequestDto;
+import org.mj.trip.pointrecommendation.dto.PointRecommendationRequestResponseDto;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -25,35 +27,30 @@ public class PointRecommendationService {
 
     private final PointRecommendationRequestRepository pointRecommendationRequestRepository;
     private final PointRecommendationRepository pointRecommendationRepository;
+    private final AsyncRecommendationService asyncRecommendationService;
 
     @Transactional
-    public void createRecommendation(Long memberId, PointRecommendationRequestDto request) {
-        // 1. RecommendationRequest 저장
+    public Long createRecommendation(Long memberId, PointRecommendationRequestDto request) {
         PointRecommendationRequest recommendationRequest = PointRecommendationRequest.builder()
                 .userId(memberId)
                 .requestText(request.requestText())
                 .build();
 
-        recommendationRequest = pointRecommendationRequestRepository.save(recommendationRequest);
+        PointRecommendationRequest savedRequest = pointRecommendationRequestRepository.save(recommendationRequest);
 
-        // 2. 추천 생성 (실제로는 AI나 알고리즘이 작동하지만, 여기서는 더미 데이터로 구현)
-        generateRecommendations(
-                recommendationRequest
+        // 비동기 스레드에 추천 생성 작업 위임 (이 메서드는 블로킹되지 않고 바로 넘어감)
+        asyncRecommendationService.processRecommendationInBackground(
+                savedRequest.getId(),
+                savedRequest.getRequestText(),
+                memberId
         );
 
-    }
-
-    private void generateRecommendations(PointRecommendationRequest request) {
-        Long requestId = request.getId();
-        Long memberId = request.getUserId();
-        String requestText = request.getRequestText();
-
-        throw new RuntimeException("not implemented");
+        return savedRequest.getId();
     }
 
     @Transactional(readOnly = true)
-    public PointRecommendationListResponseDto listRecommendations(
-            int page, int size, String sort, String order) {
+    public PointRecommendationListResponseDto recommendationRequests(
+            int page, int size, String sort, String order, Long userId) {
 
         Sort.Direction direction =
                 "asc".equalsIgnoreCase(order)
@@ -68,12 +65,12 @@ public class PointRecommendationService {
                 page, size, springSort
         );
 
-        Page<PointRecommendation> recommendationPage =
-                pointRecommendationRepository.findAll(pageable);
+        Page<PointRecommendationRequest> recommendationPage =
+                pointRecommendationRequestRepository.findByUserId(userId, pageable);
 
-        List<PointRecommendationListResponseDto.RecommendationSummary> summaries =
+        List<PointRecommendationRequestResponseDto> summaries =
                 recommendationPage.getContent().stream()
-                        .map(PointRecommendationListResponseDto.RecommendationSummary::from)
+                        .map(entity->new PointRecommendationRequestResponseDto(entity.getId(), entity.getRequestText()))
                         .toList();
 
         PointRecommendationListResponseDto.Meta meta =

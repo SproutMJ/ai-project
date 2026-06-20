@@ -26,7 +26,7 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(jwtAuthenticationInterceptor)
-                .addPathPatterns("/v1/members/**", "/v1/destination-recommendations/**")
-                .excludePathPatterns("/v1/members"); // 회원가입은 인증 불필요
+                .addPathPatterns("/v1/members/**", "/v1/**")
+                .excludePathPatterns("/v1/members", "/v1/auth/login"); // 회원가입은 인증 불필요
     }
 }

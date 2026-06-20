@@ -6,6 +6,7 @@ import org.hibernate.annotations.Fetch;
 import org.hibernate.annotations.FetchMode;
 import org.mj.trip.common.entity.BaseTimeEntity;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -30,6 +31,12 @@ public class RouteRecommendation extends BaseTimeEntity {
 
     @Column(nullable = false, length = 100)
     private String name;
+
+    @Column(nullable = false)
+    private LocalDate startDate;
+
+    @Column(nullable = false)
+    private LocalDate endDate;
 
     @Column(nullable = false)
     private Double recommendationScore;
