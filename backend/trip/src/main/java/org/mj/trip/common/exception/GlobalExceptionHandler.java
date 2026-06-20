@@ -27,7 +27,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleGeneralException(Exception e) {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error("INTERNAL_SERVER_ERROR", "서버 오류가 발생했습니다"));
+                .body(ApiResponse.error("INTERNAL_SERVER_ERROR", "서버 오류가 발생했습니다"+e.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
