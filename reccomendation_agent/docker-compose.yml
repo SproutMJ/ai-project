@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  agent-api:
+    build: .
+    container_name: smolagent-fastapi
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/code/app
+    environment:
+      # 파이썬 코드에서 os.getenv()로 읽어갈 환경 변수
+      - LLM_API_BASE=
+      - LLM_API_KEY=YOUR_API_KEY
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
