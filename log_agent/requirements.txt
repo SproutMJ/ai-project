@@ -1,0 +1,6 @@
+smolagents>=1.0.0
+openai>=1.0.0
+duckduckgo-search>=5.0.0
+aiofiles
+httpx
+ddgs

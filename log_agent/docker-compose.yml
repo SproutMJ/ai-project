@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  log-agent:
+    build: .
+    container_name: log-agent-monitor
+    restart: always
+    environment:
+      # 컨테이너 내부에서 바라볼 로그 파일 경로
+      - LOG_FILE_PATH=/app/logs/spring-app.log
+      - LLM_API_BASE=
+    volumes:
+      # [중요] 호스트 서버의 로그 디렉토리를 컨테이너의 /app/logs와 공유합니다.
+      # 여기서는 현재 폴더의 ./host_logs 폴더를 예시로 들었습니다.
+      - ../backend/trip/logs:/app/logs
