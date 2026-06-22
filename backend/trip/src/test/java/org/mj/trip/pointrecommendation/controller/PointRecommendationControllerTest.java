@@ -10,12 +10,16 @@ import org.junit.jupiter.api.Test;
 import org.mj.trip.auth.token.JwtAuthenticationInterceptor;
 import org.mj.trip.common.config.WebConfig;
 import org.mj.trip.common.exception.GlobalExceptionHandler;
+import org.mj.trip.common.exception.ResourceNotFoundException;
+import org.mj.trip.common.service.AsyncRecommendationService;
 import org.mj.trip.pointrecommendation.domain.PointRecommendation;
 import org.mj.trip.pointrecommendation.domain.PointRecommendationRequest;
 import org.mj.trip.pointrecommendation.dto.PointRecommendationDetailResponseDto;
 import org.mj.trip.pointrecommendation.dto.PointRecommendationListResponseDto;
 import org.mj.trip.pointrecommendation.dto.PointRecommendationRequestDto;
+import org.mj.trip.pointrecommendation.dto.PointRecommendationRequestResponseDto;
 import org.mj.trip.pointrecommendation.service.PointRecommendationService;
+import org.mockito.Mock;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -28,6 +32,7 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
@@ -57,6 +62,9 @@ class PointRecommendationControllerTest {
     @MockBean
     private JwtAuthenticationInterceptor jwtAuthenticationInterceptor;
 
+    @Mock
+    private AsyncRecommendationService asyncRecommendationService;
+
     @Autowired
     private ObjectMapper objectMapper;
 
@@ -71,7 +79,7 @@ class PointRecommendationControllerTest {
                 });
     }
 
-    @DisplayName("POST /api/recommendations - 추천 요청 생성 성공")
+    @DisplayName("POST /v1/recommendations - 추천 요청 생성 성공")
     @Test
     void createRecommendation_shouldReturn201() throws Exception {
         // given
@@ -82,11 +90,14 @@ class PointRecommendationControllerTest {
                 }
                 """;
 
-        doNothing().when(pointRecommendationService)
-                .createRecommendation(anyLong(), any(PointRecommendationRequestDto.class));
+        doNothing().when(asyncRecommendationService)
+                .processRecommendationInBackground(anyLong(), anyString(), anyLong());
+
+        when(pointRecommendationService.createRecommendation(anyLong(), any(PointRecommendationRequestDto.class)))
+                .thenReturn(1L);
 
         // when & then
-        mockMvc.perform(post("/api/recommendations")
+        mockMvc.perform(post("/v1/recommendations")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
                 .andExpect(status().isCreated());
@@ -95,7 +106,7 @@ class PointRecommendationControllerTest {
                 .createRecommendation(eq(1L), any(PointRecommendationRequestDto.class));
     }
 
-    @DisplayName("POST /api/recommendations - requestText 누락 시 400 Bad Request")
+    @DisplayName("POST /v1/recommendations - requestText 누락 시 400 Bad Request")
     @Test
     void createRecommendation_shouldReturn400WhenRequestTextMissing() throws Exception {
         // given
@@ -105,7 +116,7 @@ class PointRecommendationControllerTest {
                 """;
 
         // when & then
-        mockMvc.perform(post("/api/recommendations")
+        mockMvc.perform(post("/v1/recommendations")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
                 .andExpect(status().isBadRequest());
@@ -113,19 +124,23 @@ class PointRecommendationControllerTest {
         verifyNoInteractions(pointRecommendationService);
     }
 
-    @DisplayName("GET /api/recommendations - 추천 목록 조회 성공")
+    @DisplayName("GET /v1/recommendations - 추천 목록 조회 성공")
     @Test
     void listRecommendations_shouldReturnPaginatedRecommendations() throws Exception {
         // given
+
+        long userId = 1L;
         PointRecommendationRequest dummyRequest = PointRecommendationRequest.builder()
                 .id(1L)
-                .userId(1L)
+                .userId(userId)
                 .requestText("서울 여행")
                 .build();
 
+        // 참고: DTO 응답 스펙이 Request 정보만 담도록 변경되어
+        // PointRecommendation 객체는 이 테스트에서 필수가 아닐 수 있지만 기존 맥락 유지를 위해 남겨둡니다.
         PointRecommendation dummyRecommendation = PointRecommendation.builder()
                 .request(dummyRequest)
-                .userId(1L)
+                .userId(userId)
                 .name("경복궁")
                 .recommendationScore(95.5)
                 .shortComment("서울의 대표적인 궁궐")
@@ -133,38 +148,41 @@ class PointRecommendationControllerTest {
                 .region("서울 종로구")
                 .build();
 
-        PointRecommendationListResponseDto.Meta meta = new PointRecommendationListResponseDto.Meta(1, 10, 1, 1);
-        PointRecommendationListResponseDto.RecommendationSummary summary =
-                new PointRecommendationListResponseDto.RecommendationSummary(
-                        dummyRecommendation.getId(),
-                        dummyRecommendation.getName(),
-                        dummyRecommendation.getShortComment(),
-                        dummyRecommendation.getType(),
-                        dummyRecommendation.getRegion(),
-                        dummyRecommendation.getRecommendationScore()
-                );
-        PointRecommendationListResponseDto response =
-                new PointRecommendationListResponseDto(List.of(summary), meta);
+        // 1. Meta 객체 생성
+        PointRecommendationListResponseDto.Meta meta =
+                new PointRecommendationListResponseDto.Meta(1, 10, 1, 1);
 
-        when(pointRecommendationService.listRecommendations(0, 10, "recommendationScore", "desc"))
+        // 2. 새로운 스펙에 맞춘 Item DTO 생성 (RecommendationSummary -> PointRecommendationRequestResponseDto 대체)
+        PointRecommendationRequestResponseDto requestDto =
+                new PointRecommendationRequestResponseDto(
+                        dummyRequest.getId(),
+                        dummyRequest.getRequestText()
+                );
+
+        // 3. 최종 Response DTO 생성
+        PointRecommendationListResponseDto response =
+                new PointRecommendationListResponseDto(List.of(requestDto), meta);
+
+        when(pointRecommendationService.recommendationRequests(0, 10, "recommendationScore", "desc", userId))
                 .thenReturn(response);
 
         // when & then
-        mockMvc.perform(get("/api/recommendations")
+        mockMvc.perform(get("/v1/recommendations")
                         .param("page", "0")
                         .param("size", "10")
                         .param("sort", "recommendationScore")
                         .param("order", "desc"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.recommendations[0].name").value("경복궁"))
-                .andExpect(jsonPath("$.recommendations[0].recommendationScore").value(95.5))
+                // 4. jsonPath 검증 수정 (name, score 대신 id와 requestText 검증)
+                .andExpect(jsonPath("$.recommendations[0].id").value(1L))
+                .andExpect(jsonPath("$.recommendations[0].requestText").value("서울 여행"))
                 .andExpect(jsonPath("$.meta.totalElements").value(1));
 
         verify(pointRecommendationService, times(1))
-                .listRecommendations(0, 10, "recommendationScore", "desc");
+                .recommendationRequests(0, 10, "recommendationScore", "desc", userId);
     }
 
-    @DisplayName("GET /api/recommendations/{requestId} - 추천 상세 조회 성공")
+    @DisplayName("GET /v1/recommendations/{requestId} - 추천 상세 조회 성공")
     @Test
     void getRecommendationDetail_shouldReturnDetail() throws Exception {
         // given
@@ -213,7 +231,7 @@ class PointRecommendationControllerTest {
         when(pointRecommendationService.getRecommendationDetail(1L)).thenReturn(response);
 
         // when & then
-        mockMvc.perform(get("/api/recommendations/1"))
+        mockMvc.perform(get("/v1/recommendations/1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.requestInfo.requestText").value("서울 여행 추천"))
                 .andExpect(jsonPath("$.recommendations[0].name").value("경복궁"))
@@ -222,7 +240,7 @@ class PointRecommendationControllerTest {
         verify(pointRecommendationService, times(1)).getRecommendationDetail(1L);
     }
 
-    @DisplayName("GET /api/recommendations/{requestId} - 존재하지 않는 요청 ID로 조회 시 404")
+    @DisplayName("GET /v1/recommendations/{requestId} - 존재하지 않는 요청 ID로 조회 시 404")
     @Test
     void getRecommendationDetail_shouldReturn404WhenNotFound() throws Exception {
         // given
@@ -230,13 +248,13 @@ class PointRecommendationControllerTest {
                 .thenThrow(new org.mj.trip.common.exception.ResourceNotFoundException("RecommendationRequest not found: 999"));
 
         // when & then
-        mockMvc.perform(get("/api/recommendations/999"))
+        mockMvc.perform(get("/v1/recommendations/999"))
                 .andExpect(status().isNotFound());
 
         verify(pointRecommendationService, times(1)).getRecommendationDetail(999L);
     }
 
-    @DisplayName("DELETE /api/recommendations/{requestId} - 추천 요청 삭제 성공")
+    @DisplayName("DELETE /v1/recommendations/{requestId} - 추천 요청 삭제 성공")
     @Test
     void deleteRecommendationRequest_shouldReturn204() throws Exception {
         // given
@@ -244,22 +262,22 @@ class PointRecommendationControllerTest {
                 .deleteRecommendationRequest(1L);
 
         // when & then
-        mockMvc.perform(delete("/api/recommendations/1"))
+        mockMvc.perform(delete("/v1/recommendations/1"))
                 .andExpect(status().isNoContent());
 
         verify(pointRecommendationService, times(1)).deleteRecommendationRequest(1L);
     }
 
-    @DisplayName("DELETE /api/recommendations/{requestId} - 존재하지 않는 요청 ID 삭제 시 404")
+    @DisplayName("DELETE /v1/recommendations/{requestId} - 존재하지 않는 요청 ID 삭제 시 404")
     @Test
     void deleteRecommendationRequest_shouldReturn404WhenNotFound() throws Exception {
         // given
-        doThrow(new org.mj.trip.common.exception.ResourceNotFoundException("RecommendationRequest not found: 999"))
+        doThrow(new ResourceNotFoundException("RecommendationRequest not found: 999"))
                 .when(pointRecommendationService)
                 .deleteRecommendationRequest(999L);
 
         // when & then
-        mockMvc.perform(delete("/api/recommendations/999"))
+        mockMvc.perform(delete("/v1/recommendations/999"))
                 .andExpect(status().isNotFound());
 
         verify(pointRecommendationService, times(1)).deleteRecommendationRequest(999L);

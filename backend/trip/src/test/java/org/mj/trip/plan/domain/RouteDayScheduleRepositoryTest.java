@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -24,6 +26,9 @@ class RouteDayScheduleRepositoryTest {
         // given
         // 수정: recommendationScore, shortComment, region 등 nullable=false인 필드 값 설정
         RouteRecommendation routeRecommendation = RouteRecommendation.builder()
+                .startDate(LocalDate.now())
+                .endDate(LocalDate.now())
+                .budget(String.valueOf(BigDecimal.valueOf(1000000)))
                 .requestId(1L)
                 .userId(1L)
                 .name("테스트 여행")

@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -26,6 +27,8 @@ class RouteScheduleItemRepositoryTest {
     @DisplayName("RouteScheduleItem - NODE 타입 저장 및 조회")
     void saveAndFindNodeItem() {
         RouteRecommendation routeRecommendation = RouteRecommendation.builder()
+                .startDate(LocalDate.now())
+                .endDate(LocalDate.now())
                 .requestId(1L)
                 .userId(1L)
                 .name("서울 여행 추천")
@@ -84,6 +87,8 @@ class RouteScheduleItemRepositoryTest {
     @DisplayName("RouteScheduleItem - EDGE 타입 저장 및 조회")
     void saveAndFindEdgeItem() {
         RouteRecommendation routeRecommendation = RouteRecommendation.builder()
+                .startDate(LocalDate.now())
+                .endDate(LocalDate.now())
                 .requestId(1L)
                 .userId(1L)
                 .name("서울 여행 추천")
@@ -130,6 +135,8 @@ class RouteScheduleItemRepositoryTest {
     @DisplayName("RouteScheduleItem - dayScheduleId로 조회")
     void findByDayScheduleId() {
         RouteRecommendation routeRecommendation = RouteRecommendation.builder()
+                .startDate(LocalDate.now())
+                .endDate(LocalDate.now())
                 .requestId(1L)
                 .userId(1L)
                 .name("서울 여행 추천")
@@ -189,6 +196,8 @@ class RouteScheduleItemRepositoryTest {
     @DisplayName("RouteScheduleItem - 삭제 테스트")
     void deleteTest() {
         RouteRecommendation routeRecommendation = RouteRecommendation.builder()
+                .startDate(LocalDate.now())
+                .endDate(LocalDate.now())
                 .requestId(1L)
                 .userId(1L)
                 .name("서울 여행 추천")

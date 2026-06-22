@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,6 +21,9 @@ class RouteRecommendationRepositoryTest {
     @Autowired
     private TestEntityManager entityManager;
 
+    private static final LocalDate START_DATE = LocalDate.of(2026, 7, 1);
+    private static final LocalDate END_DATE = LocalDate.of(2026, 7, 3);
+
     @Test
     @DisplayName("RouteRecommendation 저장 및 findById로 조회")
     void saveAndFindById() {
@@ -32,6 +36,8 @@ class RouteRecommendationRepositoryTest {
                 .shortComment("서울의 명소를 효율적으로 돌아보는 코스")
                 .budget("50000")
                 .region("서울특별시")
+                .startDate(START_DATE)
+                .endDate(END_DATE)
                 .build();
 
         // when
@@ -63,6 +69,8 @@ class RouteRecommendationRepositoryTest {
                 .recommendationScore(4.5)
                 .shortComment("설명 1")
                 .region("서울특별시")
+                .startDate(START_DATE)
+                .endDate(END_DATE)
                 .build();
         routeRecommendationRepository.save(route1);
 
@@ -73,6 +81,8 @@ class RouteRecommendationRepositoryTest {
                 .recommendationScore(4.2)
                 .shortComment("설명 2")
                 .region("경기도")
+                .startDate(START_DATE)
+                .endDate(END_DATE)
                 .build();
         routeRecommendationRepository.save(route2);
 
@@ -83,6 +93,8 @@ class RouteRecommendationRepositoryTest {
                 .recommendationScore(4.0)
                 .shortComment("다른 사용자")
                 .region("부산광역시")
+                .startDate(START_DATE)
+                .endDate(END_DATE)
                 .build();
         routeRecommendationRepository.save(route3);
 
@@ -122,6 +134,8 @@ class RouteRecommendationRepositoryTest {
                 .shortComment("서울의 명소를 효율적으로 돌아보는 코스")
                 .budget("50000")
                 .region("서울특별시")
+                .startDate(START_DATE)
+                .endDate(END_DATE)
                 .build();
         routeRecommendationRepository.save(routeRecommendation);
         entityManager.flush();
@@ -149,6 +163,8 @@ class RouteRecommendationRepositoryTest {
                 .shortComment("서울의 명소를 효율적으로 돌아보는 코스")
                 .budget("50000")
                 .region("서울특별시")
+                .startDate(START_DATE)
+                .endDate(END_DATE)
                 .build();
         routeRecommendationRepository.save(routeRecommendation);
         entityManager.flush();
@@ -174,6 +190,8 @@ class RouteRecommendationRepositoryTest {
                 .shortComment("서울의 명소를 효율적으로 돌아보는 코스")
                 .budget("50000")
                 .region("서울특별시")
+                .startDate(START_DATE)
+                .endDate(END_DATE)
                 .build();
         routeRecommendationRepository.save(routeRecommendation);
 
@@ -224,6 +242,8 @@ class RouteRecommendationRepositoryTest {
                 .recommendationScore(4.0)
                 .shortComment("삭제 테스트")
                 .region("서울특별시")
+                .startDate(START_DATE)
+                .endDate(END_DATE)
                 .build();
         RouteRecommendation saved = routeRecommendationRepository.save(routeRecommendation);
         Long id = saved.getId();
@@ -251,6 +271,8 @@ class RouteRecommendationRepositoryTest {
                 .recommendationScore(4.5)
                 .shortComment("orphanRemoval 테스트")
                 .region("서울특별시")
+                .startDate(START_DATE)
+                .endDate(END_DATE)
                 .build();
         routeRecommendationRepository.save(routeRecommendation);
 

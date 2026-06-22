@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -24,6 +26,10 @@ class ScheduleRequestRepositoryTest {
     void saveAndFindById() {
         // given
         ScheduleRequest scheduleRequest = ScheduleRequest.builder()
+                .startDate(LocalDate.now())
+                .endDate(LocalDate.now())
+                .region("경기도")
+                .budget(BigDecimal.valueOf(10000))
                 .userId(1L)
                 .requestText("경기도 가볼만한 곳 추천해줘")
                 .build();
@@ -42,6 +48,10 @@ class ScheduleRequestRepositoryTest {
     void findByIdPresent() {
         // given
         ScheduleRequest scheduleRequest = ScheduleRequest.builder()
+                .startDate(LocalDate.now())
+                .endDate(LocalDate.now())
+                .region("경기도")
+                .budget(BigDecimal.valueOf(10000))
                 .userId(1L)
                 .requestText("제주도 여행 추천")
                 .build();
@@ -70,11 +80,29 @@ class ScheduleRequestRepositoryTest {
     void saveAndCount() {
         // given
         scheduleRequestRepository.save(ScheduleRequest.builder()
-                .userId(1L).requestText("요리 추천").build());
+                .userId(1L).startDate(LocalDate.now())
+                .endDate(LocalDate.now())
+                .region("경기도")
+                .budget(BigDecimal.valueOf(10000))
+                .requestText("요리 추천")
+                .budget(BigDecimal.valueOf(10000))
+                .build());
         scheduleRequestRepository.save(ScheduleRequest.builder()
-                .userId(2L).requestText("카페 추천").build());
+                .userId(2L).startDate(LocalDate.now())
+                .endDate(LocalDate.now())
+                .region("경기도")
+                .budget(BigDecimal.valueOf(10000))
+                .requestText("카페 추천")
+                .budget(BigDecimal.valueOf(10000))
+                .build());
         scheduleRequestRepository.save(ScheduleRequest.builder()
-                .userId(3L).requestText("숙소 추천").build());
+                .userId(3L).startDate(LocalDate.now())
+                .endDate(LocalDate.now())
+                .region("경기도")
+                .budget(BigDecimal.valueOf(10000))
+                .requestText("숙소 추천")
+                .budget(BigDecimal.valueOf(10000))
+                .build());
 
         // when & then
         assertEquals(3, scheduleRequestRepository.count());
@@ -85,6 +113,11 @@ class ScheduleRequestRepositoryTest {
     void deleteById() {
         // given
         ScheduleRequest scheduleRequest = ScheduleRequest.builder()
+                .startDate(LocalDate.now())
+                .endDate(LocalDate.now())
+                .region("경기도")
+                .budget(BigDecimal.valueOf(10000))
+                .budget(BigDecimal.valueOf(10000))
                 .userId(1L)
                 .requestText("삭제할 테스트")
                 .build();

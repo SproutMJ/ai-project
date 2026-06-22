@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Modifier;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -168,12 +169,12 @@ class RouteRecommendationTest {
 
             // when
             RouteRecommendation routeRecommendation = new RouteRecommendation(
-                    1L, 100L, 1L, "서울 여행", 4.5, "짧은 설명", "10만원", "서울특별시", daySchedules
+                    1L, 1L, 1L, "서울 여행", LocalDate.now(), LocalDate.now(), 4.5, "짧은 설명", "10만원", "서울특별시", daySchedules
             );
 
             // then
             assertThat(routeRecommendation.getId()).isEqualTo(1L);
-            assertThat(routeRecommendation.getRequestId()).isEqualTo(100L);
+            assertThat(routeRecommendation.getRequestId()).isEqualTo(1L);
             assertThat(routeRecommendation.getUserId()).isEqualTo(1L);
             assertThat(routeRecommendation.getName()).isEqualTo("서울 여행");
             assertThat(routeRecommendation.getRecommendationScore()).isEqualTo(4.5);

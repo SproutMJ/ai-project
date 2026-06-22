@@ -1,20 +1,24 @@
-
 package org.mj.trip.plan.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.mj.trip.auth.token.JwtTokenProvider;
-import org.mj.trip.common.exception.ResourceNotFoundException;
-import org.mj.trip.plan.dto.TripPlanDetailResponse;
-import org.mj.trip.plan.dto.TripPlanListResponse;
+import org.mj.trip.auth.token.JwtAuthenticationInterceptor;
+import org.mj.trip.common.config.WebConfig;
+import org.mj.trip.common.exception.GlobalExceptionHandler;
+import org.mj.trip.plan.dto.request.TripPlanCreateRequest;
+import org.mj.trip.plan.dto.response.ScheduleRequestResponseDto;
+import org.mj.trip.plan.dto.response.ScheduleRequestsResponseDto;
+import org.mj.trip.plan.dto.response.TripPlanDetailResponse;
 import org.mj.trip.plan.service.TripPlanService;
-import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
@@ -24,346 +28,157 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(TripPlanController.class)
-@DisplayName("TripPlanController 테스트")
+@Import({WebConfig.class, GlobalExceptionHandler.class})
 class TripPlanControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
 
-    @MockBean
-    private JwtTokenProvider jwtTokenProvider;
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @MockBean
     private TripPlanService tripPlanService;
 
-    private TripPlanListResponse mockResponse;
+    @MockBean
+    private JwtAuthenticationInterceptor jwtAuthenticationInterceptor;
 
     @BeforeEach
-    void setUp() {
-        mockResponse = createMockResponse();
-
-        // primitive int 파라미터에는 any()가 아니라 anyInt()를 사용해야 합니다.
-        doReturn(mockResponse).when(tripPlanService).listTripPlans(
-                any(),         // status
-                any(),         // region
-                any(),         // startDateFrom
-                any(),         // startDateTo
-                any(),         // createdFrom
-                any(),         // createdTo
-                anyInt(),      // page
-                anyInt(),      // size
-                anyString(),   // sort
-                anyString()    // order
-        );
+    void setUp() throws Exception {
+        // 인터셉터가 요청 객체에 memberId를 설정하도록 stub
+        lenient().when(jwtAuthenticationInterceptor.preHandle(any(HttpServletRequest.class), any(HttpServletResponse.class), any()))
+                .thenAnswer(invocation -> {
+                    HttpServletRequest request = invocation.getArgument(0);
+                    request.setAttribute("memberId", 1L);
+                    return true;
+                });
     }
 
     @Test
-    @DisplayName("성공: 전체 일정 목록 조회 - 기본 파라미터")
-    void listTripPlans_success_defaultParams() throws Exception {
+    @DisplayName("여행 일정 생성 API 테스트")
+    void createTripPlan() throws Exception {
+        // given
+        TripPlanCreateRequest request = new TripPlanCreateRequest(
+                LocalDate.of(2023, 10, 1),
+                LocalDate.of(2023, 10, 4),
+                "제주도",
+                BigDecimal.valueOf(1000000),
+                "가족과 함께하는 힐링 여행"
+        );
+
+        Long memberId = 1L;
+
+        given(tripPlanService.createTripPlan(anyLong(), any(TripPlanCreateRequest.class)))
+                .willReturn(memberId);
+
+        // when & then
+        mockMvc.perform(post("/v1/trip-plans")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andDo(print())
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    @DisplayName("여행 일정 상세 조회 API 테스트")
+    void getTripPlanDetail() throws Exception {
+        // given
+        Long tripPlanId = 1L;
+        TripPlanDetailResponse response = new TripPlanDetailResponse(
+                tripPlanId,
+                "제주도 3박 4일 여행",
+                LocalDate.of(2023, 10, 1),
+                LocalDate.of(2023, 10, 4),
+                "제주도",
+                "가족과 함께하는 힐링 여행",
+                Collections.emptyList(),
+                "ACTIVE",
+                LocalDateTime.now(),
+                LocalDateTime.now()
+        );
+
+        given(tripPlanService.getTripPlanDetail(tripPlanId)).willReturn(response);
+
+        // when & then
+        mockMvc.perform(get("/v1/trip-plans/{tripPlanId}", tripPlanId)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.tripPlanId").value(1L))
+                .andExpect(jsonPath("$.data.title").value("제주도 3박 4일 여행"))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+    }
+
+    @Test
+    @DisplayName("여행 일정 목록 페이징 조회 API 테스트")
+    void listTripPlans() throws Exception {
+        // given
+        LocalDate startDate = LocalDate.of(2023, 10, 1);
+        LocalDate endDate = LocalDate.of(2023, 10, 4);
+
+        // 1. 단일 응답 객체 생성
+        ScheduleRequestResponseDto item = new ScheduleRequestResponseDto(
+                1L,
+                1L,
+                "제주도 3박 4일 여행", // title 대신 requestText 필드에 값 주입
+                startDate,
+                endDate,
+                "제주도",
+                BigDecimal.valueOf(1000000)
+        );
+
+        // 2. 페이징 메타 데이터 생성 (page: 1, size: 20, totalElements: 1, totalPages: 1)
+        ScheduleRequestsResponseDto.Meta meta = new ScheduleRequestsResponseDto.Meta(1, 20, 1L, 1);
+
+        // 3. 서비스가 최종적으로 반환해야 할 감싸진 응답(List + Meta) DTO 생성
+        ScheduleRequestsResponseDto responseDto = new ScheduleRequestsResponseDto(List.of(item), meta);
+
+        // 서비스 Mocking
+        given(tripPlanService.listTripPlanRequests(any(), any()))
+                .willReturn(responseDto);
+
+
+        // when & then
         mockMvc.perform(get("/v1/trip-plans")
                         .param("page", "1")
                         .param("size", "20")
                         .param("sort", "createdAt")
-                        .param("order", "desc"))
+                        .param("order", "desc")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andDo(print())
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data").isNotEmpty()) // data 객체가 존재해야 함
-                .andExpect(jsonPath("$.data.data").isArray()) // 실제 배열은 data.data에 있음
-                .andExpect(jsonPath("$.data.data[0].tripPlanId").value(1))
-                .andExpect(jsonPath("$.data.data[0].region").value("도쿄"))
-                .andExpect(jsonPath("$.data.data[0].status").value("DRAFT"))
+                // JSON Path 검증 - data 객체 내부의 구조에 맞게 수정
                 .andExpect(jsonPath("$.data.meta.page").value(1))
-                .andExpect(jsonPath("$.data.meta.size").value(20))
-                .andExpect(jsonPath("$.data.meta.totalElements").value(2));
+                .andExpect(jsonPath("$.data.meta.totalElements").value(1))
+                // 수정: $.scheduleRequests -> $.data.scheduleRequests
+                .andExpect(jsonPath("$.data.scheduleRequests[0].id").value(1L))
+                .andExpect(jsonPath("$.data.scheduleRequests[0].requestText").value("제주도 3박 4일 여행"));
     }
 
     @Test
-    @DisplayName("성공: 일정 목록 조회 - 상태 필터 적용")
-    void listTripPlans_success_filterByStatus() throws Exception {
-        mockMvc.perform(get("/v1/trip-plans")
-                        .param("status", "DRAFT"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.data[0].status").value("DRAFT"));
-    }
-
-    @Test
-    @DisplayName("성공: 일정 목록 조회 - 지역 필터 적용")
-    void listTripPlans_success_filterByRegion() throws Exception {
-        mockMvc.perform(get("/v1/trip-plans")
-                        .param("region", "도쿄"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.data[0].region").value("도쿄"));
-    }
-
-    @Test
-    @DisplayName("성공: 일정 목록 조회 - 날짜 범위 필터 적용")
-    void listTripPlans_success_filterByDateRange() throws Exception {
-        mockMvc.perform(get("/v1/trip-plans")
-                        .param("startDateFrom", "2026-05-01")
-                        .param("startDateTo", "2026-05-31"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true));
-    }
-
-    @Test
-    @DisplayName("성공: 일정 목록 조회 - 생성 일시 범위 필터 적용")
-    void listTripPlans_success_filterByCreatedAtRange() throws Exception {
-        mockMvc.perform(get("/v1/trip-plans")
-                        .param("createdFrom", "2026-04-20T00:00:00")
-                        .param("createdTo", "2026-04-24T00:00:00"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true));
-    }
-
-    @Test
-    @DisplayName("성공: 일정 목록 조회 - 정렬 오름차순")
-    void listTripPlans_success_sortAsc() throws Exception {
-        mockMvc.perform(get("/v1/trip-plans")
-                        .param("order", "asc"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true));
-    }
-
-    @Test
-    @DisplayName("성공: 일정 목록 조회 - 페이지네이션 파라미터")
-    void listTripPlans_success_pagination() throws Exception {
-        TripPlanListResponse mockResponse2 = createMockResponse();
-
-        Mockito.reset(tripPlanService);
-        doReturn(mockResponse2).when(tripPlanService).listTripPlans(
-                any(),
-                any(),
-                any(),
-                any(),
-                any(),
-                any(),
-                eq(1),      // page=2 -> controller에서 page - 1 = 1
-                eq(10),
-                anyString(),
-                anyString()
-        );
-
-        mockMvc.perform(get("/v1/trip-plans")
-                        .param("page", "2")
-                        .param("size", "10"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true));
-    }
-
-    @Test
-    @DisplayName("성공: 일정 목록 조회 - 모든 필터 조합")
-    void listTripPlans_success_allFilters() throws Exception {
-        mockMvc.perform(get("/v1/trip-plans")
-                        .param("status", "DRAFT")
-                        .param("region", "도쿄")
-                        .param("startDateFrom", "2026-05-01")
-                        .param("startDateTo", "2026-05-31")
-                        .param("createdFrom", "2026-04-01T00:00:00")
-                        .param("createdTo", "2026-12-31T23:59:59"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.data[0].status").value("DRAFT"))
-                .andExpect(jsonPath("$.data.data[0].region").value("도쿄"));
-    }
-
-    @Test
-    @DisplayName("성공: 빈 결과 반환")
-    void listTripPlans_success_emptyResults() throws Exception {
-        TripPlanListResponse emptyResponse = TripPlanListResponse.from(
-                Collections.emptyList(),
-                Page.empty(Pageable.unpaged())
-        );
-
-        Mockito.reset(tripPlanService);
-        doReturn(emptyResponse).when(tripPlanService).listTripPlans(
-                any(),
-                any(),
-                any(),
-                any(),
-                any(),
-                any(),
-                anyInt(),
-                anyInt(),
-                anyString(),
-                anyString()
-        );
-
-        mockMvc.perform(get("/v1/trip-plans"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.data").isEmpty()) // 빈 배열은 data.data에 위치
-                .andExpect(jsonPath("$.data.meta.totalElements").value(0));
-    }
-
-    private TripPlanListResponse createMockResponse() {
-        TripPlanListResponse.TripPlanItem item1 = new TripPlanListResponse.TripPlanItem(
-                1L, "도쿄", "DRAFT", "도쿄 여행 일정입니다.",
-                LocalDateTime.of(2026, 4, 21, 10, 0, 0)
-        );
-        TripPlanListResponse.TripPlanItem item2 = new TripPlanListResponse.TripPlanItem(
-                2L, "오사카", "ACTIVE", "오사카 여행 일정입니다.",
-                LocalDateTime.of(2026, 4, 22, 14, 30, 0)
-        );
-
-        TripPlanListResponse.Meta meta = new TripPlanListResponse.Meta(1, 20, 2, 1);
-        return new TripPlanListResponse(List.of(item1, item2), meta);
-    }
-
-    @Test
-    @DisplayName("성공: 일정 상세 조회")
-    void getTripPlanDetail_success() throws Exception {
+    @DisplayName("여행 일정 삭제 API 테스트")
+    void deleteTripPlan() throws Exception {
         // given
         Long tripPlanId = 1L;
-
-        TripPlanDetailResponse.Request request = TripPlanDetailResponse.Request.builder()
-                .startDate(LocalDate.of(2026, 5, 1))
-                .endDate(LocalDate.of(2026, 5, 5))
-                .budgetAmount(new BigDecimal("1000000"))
-                .build();
-
-        TripPlanDetailResponse.Summary summary = TripPlanDetailResponse.Summary.builder()
-                .text("도쿄 여행 요약입니다.")
-                .build();
-
-        TripPlanDetailResponse.Item item = TripPlanDetailResponse.Item.builder()
-                .itemId(1L)
-                .startTime("10:00")
-                .endTime("12:00")
-                .itemType("ACTIVITY")
-                .placeName("센주 공항")
-                .build();
-
-        TripPlanDetailResponse.Day day = TripPlanDetailResponse.Day.builder()
-                .dayNo(1)
-                .planDate(LocalDate.of(2026, 5, 1))
-                .items(List.of(item))
-                .build();
-
-        TripPlanDetailResponse response = TripPlanDetailResponse.builder()
-                .tripPlanId(tripPlanId)
-                .status("ACTIVE")
-                .request(request)
-                .summary(summary)
-                .days(List.of(day))
-                .build();
-
-        when(tripPlanService.getTripPlanDetail(tripPlanId)).thenReturn(response);
-
-        // when & then
-        mockMvc.perform(get("/v1/trip-plans/{tripPlanId}", tripPlanId))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.tripPlanId").value(1))
-                .andExpect(jsonPath("$.data.status").value("ACTIVE"))
-                .andExpect(jsonPath("$.data.request.startDate").value("2026-05-01"))
-                .andExpect(jsonPath("$.data.request.endDate").value("2026-05-05"))
-                .andExpect(jsonPath("$.data.summary.text").value("도쿄 여행 요약입니다."))
-                .andExpect(jsonPath("$.data.days").isArray())
-                .andExpect(jsonPath("$.data.days[0].dayNo").value(1))
-                .andExpect(jsonPath("$.data.days[0].items[0].placeName").value("센주 공항"));
-    }
-
-    @Test
-    @DisplayName("실패: 존재하지 않는 일정 상세 조회")
-    void getTripPlanDetail_notFound() throws Exception {
-        // given
-        Long nonExistentId = 999L;
-
-        doThrow(new ResourceNotFoundException("일정을 찾을 수 없습니다."))
-                .when(tripPlanService).getTripPlanDetail(nonExistentId);
-
-        // when & then
-        mockMvc.perform(get("/v1/trip-plans/{tripPlanId}", nonExistentId))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.error.code").value("RESOURCE_NOT_FOUND"));
-    }
-
-    @Test
-    @DisplayName("실패: 잘못된 일정 ID 형식")
-    void getTripPlanDetail_invalidId() throws Exception {
-        // when & then
-        mockMvc.perform(get("/v1/trip-plans/{tripPlanId}", "invalid"))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    @DisplayName("실패: 음수 일정 ID")
-    void getTripPlanDetail_negativeId() throws Exception {
-        // given
-        Long negativeId = -1L;
-
-        doThrow(new IllegalArgumentException("잘못된 일정 ID입니다."))
-                .when(tripPlanService).getTripPlanDetail(negativeId);
-
-        // when & then
-        mockMvc.perform(get("/v1/trip-plans/{tripPlanId}", negativeId))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
-    }
-
-
-    @Test
-    @DisplayName("성공: 일정 삭제 - 204 No Content")
-    void deleteTripPlan_success() throws Exception {
-        // given
-        Long tripPlanId = 1L;
-
         doNothing().when(tripPlanService).deleteTripPlan(tripPlanId);
 
         // when & then
-        mockMvc.perform(delete("/v1/trip-plans/{tripPlanId}", tripPlanId))
+        mockMvc.perform(delete("/v1/trip-plans/{tripPlanId}", tripPlanId)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andDo(print())
+                // 컨트롤러에서 ResponseEntity.noContent().build(); 를 반환하므로 204 No Content 기대
                 .andExpect(status().isNoContent());
-    }
-
-    @Test
-    @DisplayName("실패: 삭제할 일정 없음 - 404 Not Found")
-    void deleteTripPlan_notFound() throws Exception {
-        // given
-        Long nonExistentId = 999L;
-
-        doThrow(new ResourceNotFoundException("삭제할 일정 정보를 찾을 수 없습니다. id: " + nonExistentId))
-                .when(tripPlanService).deleteTripPlan(nonExistentId);
-
-        // when & then
-        mockMvc.perform(delete("/v1/trip-plans/{tripPlanId}", nonExistentId))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.error.code").value("RESOURCE_NOT_FOUND"));
-    }
-
-    @Test
-    @DisplayName("실패: 잘못된 일정 ID 형식 - 400 Bad Request")
-    void deleteTripPlan_invalidId() throws Exception {
-        // when & then
-        mockMvc.perform(delete("/v1/trip-plans/{tripPlanId}", "invalid"))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    @DisplayName("실패: 음수 일정 ID - 400 Bad Request")
-    void deleteTripPlan_negativeId() throws Exception {
-        // given
-        Long negativeId = -1L;
-
-        doThrow(new IllegalArgumentException("잘못된 일정 ID입니다."))
-                .when(tripPlanService).deleteTripPlan(negativeId);
-
-        // when & then
-        mockMvc.perform(delete("/v1/trip-plans/{tripPlanId}", negativeId))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
     }
 }

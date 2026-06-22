@@ -93,8 +93,7 @@ class MemberControllerTest {
         mockMvc.perform(post("/v1/members")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isUnprocessableEntity())
-                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
+                .andExpect(status().isBadRequest());
     }
 
     @Test

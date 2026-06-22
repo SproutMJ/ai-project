@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mj.trip.common.service.AsyncRecommendationService;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -33,6 +34,9 @@ class PointRecommendationServiceTest {
 
     @Mock
     private PointRecommendationRepository pointRecommendationRepository;
+
+    @Mock
+    private AsyncRecommendationService asyncRecommendationService;
 
     @InjectMocks
     private PointRecommendationService pointRecommendationService;
@@ -80,28 +84,32 @@ class PointRecommendationServiceTest {
         // generateRecommendations를 mock으로 분리하면 더 정밀한 검증이 가능합니다.
     }
 
-    @DisplayName("추천 목록 조회 성공")
+
+    @DisplayName("추천 요청 목록 조회 성공")
     @Test
     void listRecommendations_shouldReturnPaginatedRecommendations() {
         // given
-        Page<PointRecommendation> recommendationPage = new PageImpl<>(
-                List.of(dummyRecommendation),
-                PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "recommendationScore")),
+        // PointRecommendationRequest 기반 Page를 생성합니다.
+        Page<PointRecommendationRequest> requestPage = new PageImpl<>(
+                List.of(dummyRequest),
+                PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "requestText")),
                 1
         );
 
-        when(pointRecommendationRepository.findAll(any(Pageable.class)))
-                .thenReturn(recommendationPage);
+        // pointRecommendationRequestRepository.findByUserId를 mocking합니다.
+        when(pointRecommendationRequestRepository.findByUserId(eq(1L), any(Pageable.class)))
+                .thenReturn(requestPage);
 
         // when
-        PointRecommendationListResponseDto response = pointRecommendationService.listRecommendations(0, 10, "recommendationScore", "desc");
+        PointRecommendationListResponseDto response = pointRecommendationService.recommendationRequests(0, 10, "requestText", "desc", 1L);
 
         // then
         assertThat(response).isNotNull();
         assertThat(response.recommendations()).hasSize(1);
-        assertThat(response.recommendations().get(0).name()).isEqualTo("경복궁");
+        assertThat(response.recommendations().get(0).id()).isEqualTo(1L);
+        assertThat(response.recommendations().get(0).requestText()).isEqualTo("서울 여행 추천해줘");
         assertThat(response.meta().totalElements()).isEqualTo(1);
-        verify(pointRecommendationRepository, times(1)).findAll(any(Pageable.class));
+        verify(pointRecommendationRequestRepository, times(1)).findByUserId(eq(1L), any(Pageable.class));
     }
 
     @DisplayName("추천 상세 조회 성공")
