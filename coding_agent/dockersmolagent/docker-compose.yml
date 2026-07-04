@@ -1,0 +1,21 @@
+version: "3.8"
+services:
+  agent-sandbox:
+    build: .
+    ports:
+      - "7860:7860" # Gradio UI
+    extra_hosts:
+      # [핵심] 도커 내부에서 Mac 호스트로 접근할 수 있게 해주는 설정
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - .:/app
+      # 프로젝트 파일 편집을 위한 볼륨 마운트 유지
+      - /:/workspace/trip
+
+    environment:
+      - OPENAI_API_KEY=YOUR_API_KEY
+
+      # [모니터링 설정] Phoenix 서버 주소 지정 (Mac의 6006 포트로 전송)
+      # phoenix.otel.register()가 이 환경 변수를 자동으로 읽어갑니다.
+      - PHOENIX_COLLECTOR_ENDPOINT=http://host.docker.internal:6006
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://host.docker.internal:6006/v1/traces

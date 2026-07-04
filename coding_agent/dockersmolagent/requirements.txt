@@ -1,0 +1,11 @@
+gradio
+litellm
+arize-phoenix
+openinference-instrumentation-smolagents
+opentelemetry-sdk
+opentelemetry-exporter-otlp
+
+mcp==1.27.2
+openai==2.41.0
+smolagents==1.26.0
+smolagents[mcp]
