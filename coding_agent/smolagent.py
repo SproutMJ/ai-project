@@ -1,40 +1,52 @@
-from qwen_agent.agents import Assistant
-from qwen_agent.gui import WebUI
-from qwen_agent.tools import WebSearch, SimpleDocParser, DocParser
+import os
 
+from mcp import StdioServerParameters
+
+import smolsubagents
 from logging_config import create_logger, setup_external_loggers
 
-setup_external_loggers()
+from phoenix.otel import register
+from openinference.instrumentation.smolagents import SmolagentsInstrumentor
+
+register()
+SmolagentsInstrumentor().instrument()
+
+# setup_external_loggers()
 
 logger = create_logger("MAIN")
 
 logger.info("main started")
-logger.debug("debug message")
 
-llm_cfg = {
-    "model_type": "oai",
-    "model": "qwen3.6:35b-a3b",
-    # "model": "qwen3.6:27b",
-    "model_server": "http://:11434/v1",
-    "api_key": "EMPTY",
-    "generate_cfg": {
-        "top_p": 0.5,
-        "temperature": 0.1,
-        "use_raw_api": True,
-        'max_input_tokens': 58000,
-        'extra_body': {'chat_template_kwargs': {'enable_thinking': False}},
-    },
-}
+from smolagents import CodeAgent, LiteLLMModel, OpenAIModel, ToolCallingAgent, GradioUI, MCPClient, PlanningStep
 
-mcp_config = {
-    "mcpServers": {
-        "filesystem": {
-            "command": "npx",
-            "args": ["-y", "@modelcontextprotocol/server-filesystem",
-            ""],
-        }
-    },
-}
+model = LiteLLMModel(
+    model_id="ollama_chat/qwen3.6:35b-a3b", # This model is a bit weak for agentic behaviours though
+    api_base="http://192.168.2.16:11434", # replace with 127.0.0.1:11434 or remote open-ai compatible server if necessary
+    api_key="YOUR_API_KEY", # replace with API key if necessary
+    num_ctx=58000, # ollama default is 2048 which will fail horribly. 8192 works for easy tasks, more is better. Check https://huggingface.co/spaces/NyxKrage/LLM-Model-VRAM-Calculator to calculate how much VRAM this will need for the selected model.
+    max_tokens=58000,
+
+    temperature=0.1,
+    top_p=0.5,
+
+    flatten_messages_as_text=False,
+    chat_template_kwargs={"enable_thinking": False},
+)
+
+model2 = OpenAIModel(
+    model_id="qwen3.6:35b-a3b", # This model is a bit weak for agentic behaviours though
+    api_base="http://192.168.2.16:11434/v1", # replace with 127.0.0.1:11434 or remote open-ai compatible server if necessary
+
+    api_key="YOUR_API_KEY",
+    temperature=0.1,
+    max_tokens=150000,
+    top_p=0.5,
+
+    parallel_tool_calls=False,
+
+    reasoning_effort="none",
+)
+
 
 system_prompt = """
 # 🎯 ROLE & MISSION
@@ -59,7 +71,7 @@ After successfully executing tools and receiving their final output, you MUST sy
 * **⚠️ PRECAUTIONS:** * This tool CANNOT modify code. 
     * If analysis shows the code already meets requirements, DO NOT invoke the implementation tool. Explain the findings to the user and end the task.
 
-### 2. `implement_worker_tool2` (The "Hands" - Code Modification)
+### 2. `implement_worker_tool` (The "Hands" - Code Modification)
 * **When to use:** ONLY when you have concrete, verified absolute file paths and specific modification instructions.
 * **How to use:** Pass the exact absolute file paths and the identified root cause *exactly as they are (Raw)* into the `analysis_context` and `files` parameters. 
 * **⚠️ PRECAUTIONS:**
@@ -72,22 +84,28 @@ After successfully executing tools and receiving their final output, you MUST sy
 * **⚠️ PRECAUTIONS (Anti-Loop):**
     * Go back to using `analyze_project_worker_tool` to re-analyze the domain structure from a new perspective. Do not apply surface-level band-aids.
 """
-bot = Assistant(
-    llm=llm_cfg,
-    system_message=system_prompt,
-    function_list=[
-        # "read_file_tool",
-        # "patch_file_tool",
-        # mcp_config,
 
-        "analyze_project_worker_tool",
-        "implement_worker_tool2",
 
-        "run_gradle_tool",
-        WebSearch(),
-        # SimpleDocParser(),
-        # DocParser(),
-    ],
+
+mcp_config = StdioServerParameters(
+    command="npx",
+    args=["-y", "@modelcontextprotocol/server-filesystem", "/Users/kimminjun/IdeaProjects/www/ai-project/backend/trip"],
+    env=os.environ.copy() # npx 명령어를 찾을 수 있도록 현재 환경 변수 상속
 )
 
-WebUI(bot).run()
+from smolagents import WebSearchTool
+import smoltools
+agent = CodeAgent(
+    tools=[smoltools.RunGradleTool(), WebSearchTool()],
+    managed_agents=[smolsubagents.implementSubAgent],
+    # managed_agents=[smolsubagents.analyzeProjectSubAgent, smolsubagents.implementSubAgent],
+    model=model2,
+    instructions=system_prompt,
+    stream_outputs=True,
+    planning_interval=4,
+    add_base_tools=False,
+    verbosity_level=1
+)
+
+gradio_ui = GradioUI(agent, file_upload_folder="uploads", reset_agent_memory=False)
+gradio_ui.launch()

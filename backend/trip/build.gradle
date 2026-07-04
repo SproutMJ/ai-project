@@ -2,6 +2,11 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '3.4.5'
     id 'io.spring.dependency-management' version '1.1.7'
+    id("org.openrewrite.rewrite") version("7.33.0")
+}
+
+rewrite {
+    activeRecipe("org.openrewrite.java.format.AutoFormat")
 }
 
 group = 'org.mj'
@@ -19,6 +24,10 @@ repositories {
 }
 
 dependencies {
+    rewrite("org.openrewrite.recipe:rewrite-spring:5.18.0")
+    rewrite("org.openrewrite.recipe:rewrite-testing-frameworks:2.16.0")
+    rewrite("org.openrewrite.recipe:rewrite-static-analysis:1.15.0")
+
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
@@ -38,8 +47,49 @@ dependencies {
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+
+    rewrite("org.openrewrite.recipe:rewrite-spring:5.18.0")
+    rewrite("org.openrewrite.recipe:rewrite-testing-frameworks:2.16.0")
+    rewrite("org.openrewrite.recipe:rewrite-static-analysis:1.15.0")
 }
 
 tasks.named('test') {
     useJUnitPlatform()
+
+    // 이전 테스트 결과 캐시를 무시하고 항상 새로(clean) 테스트를 실행하도록 강제합니다.
+    outputs.upToDateWhen { false }
+
+    testLogging {
+        // HTML 리포트에 나오는 상세 예외 정보와 Root Cause를 터미널에도 출력하도록 강제합니다.
+        exceptionFormat "full"
+        showExceptions true
+        showCauses true
+        showStackTraces true
+    }
+}
+
+tasks.register('customTest', Test) {
+    description = 'Runs the custom tests always from a clean state'
+    group = 'verification'
+
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+
+    useJUnitPlatform()
+    failFast = true
+
+    // 이전 테스트 결과 캐시를 무시하고 항상 새로(clean) 테스트를 실행하도록 강제합니다.
+    outputs.upToDateWhen { false }
+
+    testLogging {
+        // 성공한 테스트는 무시하고 '실패한' 테스트에 대해서만 로그를 남깁니다.
+        events "failed"
+
+        // HTML 리포트에 나오는 상세 예외 정보와 Root Cause를 터미널에도 출력하도록 강제합니다.
+        exceptionFormat "full"
+        showExceptions true
+        showCauses true
+        showStackTraces false
+    }
 }

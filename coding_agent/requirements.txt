@@ -1,0 +1,2 @@
+colorlog==6.10.1
+qwen_agent==0.0.34

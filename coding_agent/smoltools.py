@@ -1,21 +1,22 @@
+import nest_asyncio
+# nest_asyncio.apply()
+
+
 import subprocess
 from pathlib import Path
 import re
 
+from mcp import StdioServerParameters
 from openai import OpenAI
-from qwen_agent.tools.base import BaseTool, register_tool
-from qwen_agent.agents import Assistant
+from smolagents import CodeAgent, LiteLLMModel, OpenAIModel, ToolCallingAgent, MCPClient
 
-import gc
 import os
-import json
 
 from logging_config import create_logger
-import time
 
 logger = create_logger("TOOL")
 
-ALLOWED_PREFIX = Path("").resolve()
+ALLOWED_PREFIX = Path("/Users/kimminjun/IdeaProjects/www/ai-project/backend/trip").resolve()
 
 
 ALLOWED_TASKS = {
@@ -34,23 +35,38 @@ EXCLUDED_DIRS = {
 }
 
 
-llm_cfg = {
-    "model_type": "oai",
-    "model": "qwen3.6:35b-a3b",
-    "model_server": "http://:11434/v1",
-    "api_key": "EMPTY",
-    "generate_cfg": {
-        "top_p": 0.5,
-        "temperature": 0.1,
-        "use_raw_api": True,
-        "max_input_tokens": 58000,
-    },
-}
+model = LiteLLMModel(
+    model_id="ollama_chat/qwen3.6:35b-a3b", # This model is a bit weak for agentic behaviours though
+    api_base="http://192.168.2.16:11434", # replace with 127.0.0.1:11434 or remote open-ai compatible server if necessary
+    api_key="YOUR_API_KEY", # replace with API key if necessary
+    num_ctx=58000, # ollama default is 2048 which will fail horribly. 8192 works for easy tasks, more is better. Check https://huggingface.co/spaces/NyxKrage/LLM-Model-VRAM-Calculator to calculate how much VRAM this will need for the selected model.
+    max_tokens=58000,
+
+    temperature=0.1,
+    top_p=0.5,
+
+    flatten_messages_as_text=False,
+    chat_template_kwargs={"enable_thinking": False},
+)
+
+model2 = OpenAIModel(
+    model_id="qwen3.6:35b-a3b", # This model is a bit weak for agentic behaviours though
+    api_base="http://192.168.2.16:11434/v1", # replace with 127.0.0.1:11434 or remote open-ai compatible server if necessary
+
+    api_key="YOUR_API_KEY",
+    temperature=0.1,
+    max_tokens=150000,
+    top_p=0.5,
+
+    parallel_tool_calls=False,
+
+    reasoning_effort="none",
+)
 
 coding_llm_cfg = {
     "model_type": "oai",
     "model": "qwen3.6:35b-a3b",
-    "model_server": "http://:11434/v1",
+    "model_server": "http://192.168.2.16:11434/v1",
     "api_key": "EMPTY",
     "generate_cfg": {
         "top_p": 0.5,
@@ -61,57 +77,59 @@ coding_llm_cfg = {
     },
 }
 
-mcp_config = {
-    "mcpServers": {
-        "filesystem": {
-            "command": "npx",
-            "args": [
-                "-y",
-                "@modelcontextprotocol/server-filesystem",
-                "",
-            ],
-        }
-    }
-}
+server_parameters = StdioServerParameters(
+    command="npx",
+    args=["-y", "@modelcontextprotocol/server-filesystem", "/Users/kimminjun/IdeaProjects/www/ai-project/backend/trip"],
+    env=os.environ.copy() # npx 명령어를 찾을 수 있도록 현재 환경 변수 상속
+)
+mcp_client = MCPClient(server_parameters)
+mcp_tools = mcp_client.get_tools()
+
+from smolagents import Tool, ToolCallingAgent, LiteLLMModel
+
+import gc
+import json
+import time
+
+from smolagents import Tool, ToolCallingAgent
 
 
-@register_tool("analyze_project_worker_tool")
-class AnalyzeProjectWorkerTool(BaseTool):
+class AnalyzeProjectWorkerTool(Tool):
     name = "analyze_project_worker_tool"
     description = """
     Analyzes exactly one specified file for the given task and analysis points,
     then returns only the file's role, dependencies, and explicit modification/deletion points.
     """
-    parameters = {
-        "type": "object",
-        "properties": {
-            "task": {
-                "model": "qwen3.6:35b-a3b",
-                "type": "string",
-                "description": "DETAILED task description... (e.g., 'Refactor domain entity relationship' or 'Implement target method').",
-            },
-            "project_root": {
-                "type": "string",
-                "description": "Project root path",
-            },
-            "analysis_points": {
-                "type": "string",
-                "description": "Comma-separated string of specific technical points to check (e.g., 'Check if the foreign key mapping matches the derived query, Verify @Transactional annotation')."
-            },
-            "error_summary": {
-                "type": "string",
-                "description": "CRITICAL: The core error summary, exception message, or your current diagnosis (e.g., 'AssertionFailedError due to missing delete logic')."
-            },
-            "suspected_files": {
-                "type": "string",
-                "description": "Comma-separated string of absolute file paths suspected in previous steps (e.g., '/path/to/A.java, /path/to/B.java')."
-            }
+
+    inputs = {
+        "task": {
+            "type": "string",
+            "description": "DETAILED task description... (e.g., 'Refactor domain entity relationship' or 'Implement target method').",
         },
-        "required": ["task", "project_root", "analysis_points"],
+        "project_root": {
+            "type": "string",
+            "description": "Project root path",
+        },
+        "analysis_points": {
+            "type": "string",
+            "description": "Comma-separated string of specific technical points to check (e.g., 'Check if the foreign key mapping matches the derived query, Verify @Transactional annotation').",
+        },
+        "error_summary": {
+            "type": "string",
+            "description": "CRITICAL: The core error summary, exception message, or your current diagnosis (e.g., 'AssertionFailedError due to missing delete logic').",
+            "nullable": True,
+        },
+        "suspected_files": {
+            "type": "string",
+            "description": "Comma-separated string of absolute file paths suspected in previous steps (e.g., '/path/to/A.java, /path/to/B.java').",
+            "nullable": True,
+        },
     }
 
-    def _close_agent(self, agent: Assistant) -> None:
-        for method_name in ("close", "shutdown", "aclose"):
+    output_type = "string"
+
+    def _close_agent(self, agent) -> None:
+        for method_name in ("close", "shutdown", "aclose", "cleanup"):
             method = getattr(agent, method_name, None)
             if callable(method):
                 try:
@@ -121,27 +139,34 @@ class AnalyzeProjectWorkerTool(BaseTool):
                 break
         gc.collect()
 
-    def call(self, params: str, **kwargs) -> str:
+    def forward(
+            self,
+            task: str,
+            project_root: str,
+            analysis_points: str,
+            error_summary: str | None = None,
+            suspected_files: str | None = None,
+    ) -> str:
         logger.info("analyze_project_worker_tool called")
         start_time = time.monotonic()
+        agent = None
 
         try:
-            data = json.loads(params)
-            task = data["task"].strip()
-            project_root = data["project_root"].strip()
-            analysis_points = str(data.get("analysis_points", ""))
-            error_summary = data.get("error_summary", "")
-            suspected_files = str(data.get("suspected_files", ""))
+            task = task.strip()
+            project_root = project_root.strip()
+            analysis_points = str(analysis_points or "")
+            error_summary = error_summary or ""
+            suspected_files = str(suspected_files or "")
 
             system_p = """
             # ROLE & MISSION
             You are a Project Structure Analyst Agent. Your mission is to explore the repository layout, identify exact integration points for new features, and trace the structural root causes of bugs. You do not write code; you provide the precise "map and diagnosis" for the Implementer.
-            
+
             # STRATEGIC TRIAGE (CRITICAL)
             Stop blindly searching for symptoms. You must investigate based on the task type:
             - FOR BUG FIXES: Do not stop at the surface error. Trace the dependency chain to find the underlying structural flaw.
             - FOR FEATURE ADDITIONS: Identify the complete vertical slice required. Map the exact Controller (Entry), Service (Business Logic), and Repository/Entity (State) files needed for the integration.
-            
+
             # CONSTRAINTS & EXECUTION RULES
             1. FAIL-SAFE TRIGGER: If you encounter an execution loop or consecutive tool-calling failures (exceeding 3 attempts), ABORT IMMEDIATELY. Summarize the task status, explain the bottleneck, and stop.
             2. START HERE: Always read the overview in `project root directory/project-structure/project-overview.md` first to understand the domain.
@@ -149,9 +174,9 @@ class AnalyzeProjectWorkerTool(BaseTool):
             4. SEMANTIC PEEKING (`one_file_analyzer_tool`): You MUST use this tool to examine file contents. Formulate highly specific `query` strings targeted at the root cause (e.g., "Extract JPA entity relationships and FK constraints", "Check transactional boundaries", "List method signatures for [X]").
             5. CONCISE OUTPUT: Keep your final output under 15 lines. The Orchestrator only needs to know WHICH specific absolute paths to modify and WHAT the exact structural root cause or integration strategy is.
             6. STAY IN BOUNDS: Only call explicit tools. Do not hallucinate paths or tools.
-            
+
             # SUB-AGENT DELEGATION & TOOL RULES
-            1. EXPLORE FIRST: You do not magically know file locations. Use `filesystem` tools (e.g., search_files) to find exact absolute paths. NEVER guess or use truncated paths (e.g., '.../src/...').
+            1. EXPLORE FIRST: You do not magically know file locations. Use filesystem tools to find exact absolute paths. NEVER guess or use truncated paths.
             2. EVIDENCE-BASED DIAGNOSIS: Never guess the internal logic of a code file. If you suspect a file contains the root cause, you MUST inspect it using `one_file_analyzer_tool` before finalizing your candidate list.
             3. PRECISE DELEGATION: When querying `one_file_analyzer_tool`, pass the exact `analysis_points` directed by the Orchestrator. Do not dilute or summarize the critical analysis points.
             """
@@ -163,138 +188,133 @@ class AnalyzeProjectWorkerTool(BaseTool):
             Analysis Points: {analysis_points}
             Error Summary (if any): {error_summary or "(none)"}
             Suspected Files (if any): {suspected_files or "(none)"}
-            
+
             [EXECUTION FLOW]
             Follow these exact steps:
             1. OVERVIEW: Check `project-overview.md` for the overarching structure.
-            2. LOCATE: Use `filesystem-search_files` to find exact absolute paths of files that match the task requirements. DO NOT guess paths.
-            3. INSPECT (IF NECESSARY): Verify file roles by calling `one_file_analyzer_tool` with a target `query` (e.g., "class definition", "endpoint mapping"). Do NOT read the entire file.
+            2. LOCATE: Use filesystem-search_files to find exact absolute paths of files that match the task requirements. DO NOT guess paths.
+            3. INSPECT (IF NECESSARY): Verify file roles by calling `one_file_analyzer_tool` with a target query (e.g., "class definition", "endpoint mapping"). Do NOT read the entire file.
             4. REPORT: Output the final mapping using ONLY the format below.
-            
+
             [OUTPUT RESTRICTION]
-            - Provide ONLY the structured list below. 
+            - Provide ONLY the structured list below.
             - Based on your analytical findings and the direction for improvement, briefly outline the required structural changes (DELETE/MODIFY/ADD) to guide the implementer.
             - Keep the entire response extremely brief to prevent token overflow.
-            
+
             ### Candidate Files
             - `[Verified Absolute File Path 1]`: [1-sentence reason why this file is relevant] | **Action Required**: [explain (example: Requires MODIFYING entity relationship) or "Ready to implement"]
             ...
-            
+
             ### Structural Dependencies
             - [Brief bullet point explaining how these target files call or interact with each other regarding the task]
             """
 
-            agent = Assistant(
-                llm=llm_cfg,
-                system_message=system_p,
-                function_list=[mcp_config, "one_file_analyzer_tool"],
+            # mcp_tools 는 기존 mcp_config에 해당하는 smolagents Tool 목록으로 넣어주세요.
+            agent = CodeAgent(
+                model=model2,
+                tools=[*mcp_tools, OneFileAnalyzerTool()],
+                instructions=system_p,
+                max_steps=20,
             )
 
-
-            final_text = None
-
-            for chunk in agent.run(messages=[{"role": "user", "content": prompt}]):
-                if isinstance(chunk, list):
-                    for item in chunk:
-                        if isinstance(item, dict) and item.get("role") == "assistant":
-                            final_text = item.get("content", final_text)
+            final_text = agent.run(prompt)
 
             return json.dumps(
-                {"ok": True, "result": final_text},
+                {"ok": True, "result": str(final_text)},
                 ensure_ascii=False,
             )
 
         except Exception as e:
             elapsed = time.monotonic() - start_time
-
-            logger.info(
-                "analyze_project_worker_tool failed in %.2f sec",
-                elapsed
-            )
+            logger.info("analyze_project_worker_tool failed in %.2f sec", elapsed)
             return json.dumps(
                 {"ok": False, "error": str(e)},
                 ensure_ascii=False,
             )
 
         finally:
-            self._close_agent(agent)
-            elapsed = time.monotonic() - start_time
+            if agent is not None:
+                self._close_agent(agent)
 
-            logger.info(
-                "analyze_project_worker_tool finished in %.2f sec",
-                elapsed
-            )
+            elapsed = time.monotonic() - start_time
+            logger.info("analyze_project_worker_tool finished in %.2f sec", elapsed)
 
 
 
 # LLM 설정 (필요에 따라 클래스 외부나 내부에 정의)
 llm_cfg_call = {
     "model": "qwen3.6:35b-a3b",
-    "base_url": "http://:11434/v1",
+    "base_url": "http://192.168.2.16:11434/v1",
     "api_key": "EMPTY",
     "top_p": 0.5,
     "temperature": 0.1,
 }
 
-@register_tool("one_file_analyzer_tool")
-class OneFileAnalyzerTool(BaseTool):
+class OneFileAnalyzerTool(Tool):
     name = "one_file_analyzer_tool"
     description = (
         "Analyzes exactly one specified file for the given task and analysis points, "
         "then returns only the file's role, dependencies, and explicit modification/deletion points."
     )
-    parameters = {
-        "type": "object",
-        "properties": {
-            "task": {
-                "type": "string",
-                "description": "DETAILED task description. Do not use generic titles. You MUST include specific method names, missing annotations, or exact logic to analyze.",
-            },
-            "project_root": {
-                "type": "string",
-                "description": "Project root path",
-            },
-            "file_path": {
-                "type": "string",
-                "description": "Absolute path of the single target file to analyze",
-            },
-            "analysis_points": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "Specific technical points to check.",
-            },
-            "suspected_symbols": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "Specific symbols or annotations suspected of conflict",
-            },
+
+    inputs = {
+        "task": {
+            "type": "string",
+            "description": "DETAILED task description. Do not use generic titles. You MUST include specific method names, missing annotations, or exact logic to analyze.",
         },
-        "required": ["task", "project_root", "file_path", "analysis_points", "suspected_symbols"],
+        "project_root": {
+            "type": "string",
+            "description": "Project root path",
+        },
+        "file_path": {
+            "type": "string",
+            "description": "Absolute path of the single target file to analyze",
+        },
+        "analysis_points": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Specific technical points to check.",
+        },
+        "suspected_symbols": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Specific symbols or annotations suspected of conflict",
+            "nullable": True,
+        },
     }
 
-    def call(self, params: str, **kwargs) -> str:
+    output_type = "string"
+
+    def forward(
+            self,
+            task: str,
+            project_root: str,
+            file_path: str,
+            analysis_points: list[str],
+            suspected_symbols: list[str] | None = None,
+    ) -> str:
         logger.info("one_file_analyzer_tool called")
         start_time = time.monotonic()
 
         try:
-            data = json.loads(params)
-            task = data["task"].strip()
-            project_root = data["project_root"].strip()
-            raw_file_path = data["file_path"].strip()
-            analysis_points = data.get("analysis_points", [])
-            suspected_symbols = data.get("suspected_symbols", [])
+            task = task.strip()
+            project_root = project_root.strip()
+            raw_file_path = file_path.strip()
+            analysis_points = analysis_points or []
+            suspected_symbols = suspected_symbols or []
 
             # 1. 경로 검증 (Path Validation)
             target_path = Path(raw_file_path).resolve()
-            ALLOWED_PREFIX = Path(project_root).resolve()
+            allowed_prefix = Path(project_root).resolve()
 
-            # 프로젝트 루트(ALLOWED_PREFIX) 내에 있는 파일인지 확인
-            if target_path != ALLOWED_PREFIX and ALLOWED_PREFIX not in target_path.parents:
-                error_msg = f"Security Error: Access denied. File path '{target_path}' is outside the allowed project root '{ALLOWED_PREFIX}'."
+            if target_path != allowed_prefix and allowed_prefix not in target_path.parents:
+                error_msg = (
+                    f"Security Error: Access denied. File path '{target_path}' "
+                    f"is outside the allowed project root '{allowed_prefix}'."
+                )
                 logger.warning(error_msg)
                 return json.dumps({"ok": False, "error": error_msg}, ensure_ascii=False)
 
-            # 파일 존재 여부 및 파일 타입 확인
             if not target_path.exists() or not target_path.is_file():
                 error_msg = f"File Not Found Error: The file '{target_path}' does not exist or is not a file."
                 logger.warning(error_msg)
@@ -302,7 +322,7 @@ class OneFileAnalyzerTool(BaseTool):
 
             # 2. 파이썬에서 직접 파일 읽기
             try:
-                with open(target_path, 'r', encoding='utf-8') as f:
+                with open(target_path, "r", encoding="utf-8") as f:
                     file_content = f.read()
             except Exception as e:
                 return json.dumps({"ok": False, "error": f"Failed to read file: {str(e)}"}, ensure_ascii=False)
@@ -323,59 +343,56 @@ class OneFileAnalyzerTool(BaseTool):
 
             prompt = f"""
             Analyze exactly one file for the task below based on the provided file content.
-            
+
             Task: {task}
             Target File: {target_path}
-            
+
             [File Content]
             ```
             {file_content}
             ```
-            
+
             [Analysis Points]
             {json.dumps(analysis_points, ensure_ascii=False, indent=2)}
-            
+
             [Suspected Symbols / Conflict Checks]
             {json.dumps(suspected_symbols, ensure_ascii=False, indent=2) if suspected_symbols else "None specified. Check for general conflicts."}
-            
+
             [Return Format]
             ### File Role
             - one sentence
-            
+
             ### Dependencies
             - direct dependencies visible from this file
-            
+
             ### Conflicting/Target Code (CRITICAL UNIQUE KEY)
-            - [SEMANTIC_PATH]: [Logical path to the target from outermost to innermost scope, e.g., 'Class > Method']
-            - [UNIQUE_CODE_BLOCK]: [Extract 3~5 lines of the EXACT code that needs changing, including at least 1 line of surrounding context above and below]
+            - [SEMANTIC_PATH]&#58; [Logical path to the target from outermost to innermost scope, e.g., 'Class > Method']
+            - [UNIQUE_CODE_BLOCK]&#58; [Extract 3~5 lines of the EXACT code that needs changing, including at least 1 line of surrounding context above and below]
             - Action Required: [DELETE | MODIFY | ADD | NONE]
-            
+
             ### Analysis Findings
             - one bullet per analysis point (one sentence each)
-            
+
             ### Task Impact & Next Steps
             - [One sentence explicit instruction for the Implementer]
             """
 
-            # 4. LLM API 호출 (OpenAI SDK 호환)
             client = OpenAI(
                 base_url=llm_cfg_call["base_url"],
-                api_key=llm_cfg_call["api_key"]
+                api_key=llm_cfg_call["api_key"],
             )
 
             response = client.chat.completions.create(
                 model=llm_cfg_call["model"],
                 messages=[
                     {"role": "system", "content": system_p},
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
                 temperature=llm_cfg_call["temperature"],
-                top_p=llm_cfg_call["top_p"]
-                # 설정에 따라 max_tokens 등을 추가할 수 있습니다.
+                top_p=llm_cfg_call["top_p"],
             )
 
             final_text = response.choices[0].message.content
-
             return json.dumps({"ok": True, "result": final_text}, ensure_ascii=False)
 
         except Exception as e:
@@ -386,324 +403,6 @@ class OneFileAnalyzerTool(BaseTool):
         finally:
             elapsed = time.monotonic() - start_time
             logger.info("one_file_analyzer_tool finished in %.2f sec", elapsed)
-
-
-@register_tool("implement_worker_tool")
-class ImplementChangeWorkerTool(BaseTool):
-    name = "implement_worker_tool"
-    description = (
-        "A tool that can perform coding tasks. It formulates a precise plan using the provided analysis context, prioritizing DELETE/MODIFY over ADD."
-    )
-    parameters = {
-        "type": "object",
-        "properties": {
-            "task": {
-                "type": "string",
-                "description": "Overall implementation detailed request"
-            },
-            "goal": {
-                "type": "string",
-                "description": "What the final result should achieve"
-            },
-            "analysis_context": {
-                "type": "string",
-                "description": "Detailed Analysis results required this job"
-            },
-            "files": {
-                "type": "string",
-                "description": "Comma-separated string of target files to touch (e.g., '/path/to/fileA.java, /path/to/fileB.py')"
-            }
-        },
-        "required": ["task", "goal", "analysis_context", "files"]
-    }
-
-    def _close_agent(self, agent: Assistant) -> None:
-        for method_name in ("close", "shutdown", "aclose"):
-            method = getattr(agent, method_name, None)
-            if callable(method):
-                try:
-                    method()
-                except Exception:
-                    pass
-                break
-        gc.collect()
-
-    def call(self, params: str, **kwargs) -> str:
-        logger.info("implement_worker_tool called")
-        start_time = time.monotonic()
-
-        try:
-            data = json.loads(params)
-            task = data["task"].strip()
-            goal = data["goal"].strip()
-            files = str(data.get("files", ""))
-            analysis_context = data["analysis_context"]
-
-            system_p = """
-            You are a Precise Code Implementation Orchestrator.
-            Your ONLY job is to execute the exact implementation request provided by the user and the given file list.
-            
-            [Hard Rules]
-            1. Do only the requested task. Do not widen scope.
-            2. Work only on the files explicitly provided in `files`, unless a missing dependency makes the task impossible without touching one extra file.
-            3. Never modify files for cleanup, refactoring, style, or curiosity.
-            4. Never introduce new features, abstractions, or design changes.
-            5. Use the smallest possible change that satisfies the request.
-            6. Do not re-interpret the task into a larger problem.
-            7. 7. If the `analysis_context` points to a root cause in a file that is NOT included in the `files` list, YOU MUST ABORT IMMEDIATELY. Do NOT attempt to apply workarounds in the provided files. Return an error stating: "Missing root cause file: [File Name]".
-            8. Do not explain reasoning. Do not discuss architecture.
-            9. If you must touch an additional file, it must be strictly necessary and minimal.
-            10. Keep tool calls minimal and targeted.
-            11. 11. CRITICAL RULE FOR BUG FIXING: Resolve the root architectural or domain model issue first. Do not just append configuration workarounds (e.g., blindly adding @Transactional) if the entity mapping or logic is broken.
-            12. SCOPE AWARENESS: Remember that in most frameworks (like Spring), method-level configurations override class-level configurations. Always check and clean up method-level code first.
-            
-            [Sub-Agent Delegation Rules (CRITICAL)]
-            1. DELEGATE, DO NOT WRITE: You cannot modify files directly. You MUST call `one_file_implement_worker_tool` for every single file that needs changes.
-            2. ONE BY ONE: Call the tool separately for each file in your `files` list. Do not batch them.
-            3. SURGICAL PRECISION: When calling `one_file_implement_worker_tool`, you must provide a highly specific `search_scope` (e.g., "Method saveAndFindById_success") and a crystal-clear `modification_intent` (e.g., "DELETE @Rollback(false) annotation"). 
-            4. CONTEXT HANDOFF: Ensure the `modification_intent` explicitly includes instructions to resolve any scope conflicts mentioned in the `analysis_context`.
-            
-            [Self-Defense & Rejection Rules]
-            1. YOU ARE BLIND: You do not have filesystem search capabilities. 
-            2. REJECT INCOMPLETE HANDOFFS: If the `files` array is empty, contains relative/vague paths (like '.../repo.java'), or if the `analysis_context` lacks a concrete root cause, YOU MUST ABORT IMMEDIATELY.
-            3. RETURN ERROR TO ORCHESTRATOR: Return exactly this error message: "ABORTED: Missing verified absolute paths or exact analysis context. You must run analyze_project_worker_tool first and pass the exact results to me." Do not attempt to fix it blindly.
-            """
-
-            prompt = f"""
-            Implement only the exact task below.
-
-            Task: {task}
-            Goal: {goal}
-            Analysis Context (Conflicts to resolve): {analysis_context}
-            Files to touch: {files}
-            
-            [Execution Rules]
-            1. Treat the task and goal as the full scope.
-            2. Do not modify anything outside the listed files unless the change is strictly impossible without one extra dependency file.
-            3. BALANCE RULE: You are free to ADD new code (e.g., new methods, beans, fields) if the task requires it. However, if you are adding configuration or annotations, you MUST FIRST check the `analysis_context` and DELETE/MODIFY any existing local code that would override your addition.
-            4. PLAN ENFORCEMENT: Break down the plan for single-file agents using explicit action verbs: [DELETE], [MODIFY], or [ADD]. 
-            
-            [Output]
-            - Do NOT include rationales, validations, opinions, or conversational filler.
-            Return only:
-            - Changed File Paths: [Verified Absolute File Path]
-            - Change Summary: [1-sentence literal description]
-            """
-
-            agent = Assistant(
-                llm=coding_llm_cfg,
-                system_message=system_p,
-                function_list=["one_file_implement_worker_tool"],
-                # function_list=[mcp_config, "one_file_implement_worker_tool"],
-            )
-
-            final_text = None
-
-            for chunk in agent.run(messages=[{"role": "user", "content": prompt}]):
-                if isinstance(chunk, list):
-                    for item in chunk:
-                        if isinstance(item, dict) and item.get("role") == "assistant":
-                            final_text = item.get("content", final_text)
-
-            return json.dumps(
-                {"ok": True, "result": final_text},
-                ensure_ascii=False,
-            )
-
-
-        except Exception as e:
-            elapsed = time.monotonic() - start_time
-            logger.info( "implement_worker_tool failed in %.2f sec", elapsed )
-            return json.dumps(
-                {"ok": False, "error": str(e)},
-                ensure_ascii=False,
-            )
-
-        finally:
-            self._close_agent(agent)
-            elapsed = time.monotonic() - start_time
-            logger.info( "implement_worker_tool finished in %.2f sec", elapsed )
-
-
-
-@register_tool("one_file_implement_worker_tool")
-class OneFileImplementWorkerTool(BaseTool):
-    name = "one_file_implement_worker_tool"
-    description = "Modify exactly one file with minimal changes using explicit DELETE/MODIFY/ADD actions."
-    parameters = {
-        "type": "object",
-        "properties": {
-            "file_path": {"type": "string",
-                          "description": "Absolute path of the file to modify"},
-            "modification_intent": {
-                "type": "string",
-                "description": "Clear instruction on WHAT to change based on the analysis (e.g., 'Add @Modifying and @Transactional to deleteByTripPlanId', 'Remove @Rollback(false) from deleteTest')."
-            },
-            "search_scope": {
-                "type": "string",
-                "description": "The logical location within the file to look for the target (e.g., 'Method deleteTest', 'Class RecommendationReasonRepository')."
-            }
-        },
-        "required": ["file_path", "modification_intent", "search_scope"]
-    }
-
-    def _close_agent(self, agent: Assistant) -> None:
-        for method_name in ("close", "shutdown", "aclose"):
-            method = getattr(agent, method_name, None)
-            if callable(method):
-                try:
-                    method()
-                except Exception:
-                    pass
-                break
-        gc.collect()
-
-    def call(self, params: str, **kwargs) -> str:
-        logger.info("one_file_implement_worker_tool called")
-        start_time = time.monotonic()
-
-        try:
-            data = json.loads(params)
-            file_path = str(data["file_path"]).strip()
-            modification_intent = data["modification_intent"]
-            search_scope = data["search_scope"]
-
-            system_p = """
-            You are a Smart File Modification Agent.
-            Your primary target is the specified `file_path`. You are fully responsible for ensuring the file remains internally consistent by resolving any structural side effects strictly WITHIN this single file caused by your modifications.
-            
-            [Your Arsenal (Tools)]
-            You have one primary way to interact with the code:
-            1. File System MCP: Use this to read and modify the target file. You must use this for both localized logic changes and resolving internal structural updates (e.g., renaming a method that is called elsewhere in the same file).
-            
-            [Execution Strategy (CRITICAL)]
-            1. Analyze the `modification_intent`. Does it involve an internal structural change (e.g., renaming a method, changing parameters, updating a class-level variable) that other parts of the SAME FILE might depend on?
-            2. If YES (Internal Structural Change):
-            - DO NOT just modify the definition/declaration in isolation.
-            - STEP 1 (Analyze Internal Dependencies): Identify all references, method calls, or usages of the target element within the `file_path`.
-            - STEP 2 (Batch Update): Modify the target definition AND simultaneously update all related references within the file. You must ensure the file remains internally consistent, with no broken references or syntax errors.
-            3. If NO (Strictly Local Logic):
-            - Use the File System MCP to safely modify just the specific localized block (e.g., internal logic of a single method body) without worrying about file-wide references.
-            4. Code Quality & Safety:
-            - Ensure all modifications are syntactically correct, and introduce no unintended side effects within the file.
-            """
-
-            prompt = f"""
-            Modify only the target file below using the exact action specified.
-            
-            Target File: {file_path}
-            Search Scope Suggestion: {search_scope}
-            Modification Intent: {modification_intent}
-            
-            [Execution Flow]
-            1. READ: Read the relevant parts of the file to understand the current structure.
-            2. LOCATE: Find the exact lines that correspond to the `search_scope`.
-            3. APPLY: Determine the exact exact string replacement needed to fulfill the `modification_intent`.
-            4. REPORT: Return what you successfully modified.
-            
-            [Output]
-            Return only:
-            - File Path: [Verified Absolute File Path]
-            - Action Taken: [DELETE | MODIFY | ADD]
-            - Change Summary: [1-sentence literal description]
-            """
-
-            agent = Assistant(
-                llm=coding_llm_cfg,
-                system_message=system_p,
-                function_list=[mcp_config, "openrewrite_worker_tool"],
-            )
-
-            final_text = None
-            for chunk in agent.run(messages=[{"role": "user", "content": prompt}]):
-                if isinstance(chunk, list):
-                    for item in chunk:
-                        if isinstance(item, dict) and item.get("role") == "assistant":
-                            final_text = item.get("content", final_text)
-                elif isinstance(chunk, dict) and chunk.get("role") == "assistant":
-                    final_text = chunk.get("content", final_text)
-
-            return json.dumps({"ok": True, "result": final_text}, ensure_ascii=False)
-
-
-        except Exception as e:
-            elapsed = time.monotonic() - start_time
-            logger.info("one_file_implement_worker_tool failed in %.2f sec", elapsed )
-            return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
-
-        finally:
-            self._close_agent(agent)
-            elapsed = time.monotonic() - start_time
-            logger.info( "one_file_implement_worker_tool finished in %.2f sec", elapsed )
-
-@register_tool("openrewrite_worker_tool")
-class OpenRewriteWorkerTool(BaseTool):
-    name = "openrewrite_worker_tool"
-    description = "A smart tool to safely refactor code using OpenRewrite without needing to know CLI syntax."
-    parameters = {
-        "type": "object",
-        "properties": {
-            "project_root": {"type": "string"},
-            "action_type": {
-                "type": "string",
-                "description": "Must be one of: 'RENAME_METHOD', 'CLEANUP_IMPORTS', 'FIND_METHOD_DRYRUN'"
-            },
-            "target_pattern": {
-                "type": "string",
-                "description": "Required for RENAME_METHOD/FIND_METHOD. Format: 'package.ClassName methodName(..)'"
-            },
-            "new_name": {
-                "type": "string",
-                "description": "Required for RENAME_METHOD. The new method name."
-            }
-        },
-        "required": ["project_root", "action_type"]
-    }
-
-    def call(self, params: str, **kwargs) -> str:
-        data = json.loads(params)
-        action = data.get("action_type")
-        root = data["project_root"]
-
-        if action == "RENAME_METHOD":
-            pattern = data["target_pattern"]
-            new_name = data["new_name"]
-            command = f'./gradlew rewriteRun -Drewrite.activeRecipes=org.openrewrite.java.RenameMethod -Drewrite.recipe.org.openrewrite.java.RenameMethod.methodPattern="{pattern}" -Drewrite.recipe.org.openrewrite.java.RenameMethod.newName="{new_name}"'
-
-        elif action == "CLEANUP_IMPORTS":
-            command = './gradlew rewriteRun -Drewrite.activeRecipes=org.openrewrite.java.RemoveUnusedImports,org.openrewrite.staticanalysis.CommonStaticAnalysis'
-
-        elif action == "FIND_METHOD_DRYRUN":
-            pattern = data["target_pattern"]
-            command = f'./gradlew rewriteDryRun -Drewrite.activeRecipes=org.openrewrite.java.search.FindMethods -Drewrite.recipe.org.openrewrite.java.search.FindMethods.methodPattern="{pattern}"'
-
-        else:
-            return json.dumps({"ok": False, "error": "Unknown action_type"})
-
-        # 2. subprocess.run() 으로 실행 및 결과 반환
-        result = subprocess.run(command, shell=True, cwd=root, capture_output=True, text=True)
-
-        stdout_text = result.stdout or ""
-        stderr_text = result.stderr or ""
-
-        stdout_text = truncate_log_from_top(stdout_text, 50)
-        stderr_text = truncate_log_from_top(stderr_text, 300)
-
-        log_result = f"""
-        [STDOUT]
-        {stdout_text}
-        
-        [STDERR]
-        {stderr_text}
-        """
-
-        elapsed = time.monotonic() - start_time
-        logger.info( "openrewrite_worker_tool finished in %.2f sec", elapsed )
-
-        if result.returncode == 0:
-            return json.dumps({"ok": True, "result": f"Refactoring applied successfully across the project."}, ensure_ascii=False)
-        else:
-            return json.dumps({"ok": False, "error": log_result}, ensure_ascii=False)
 
 
 def truncate_log_from_top(log: str, max_lines: int = 500) -> str:
@@ -721,10 +420,7 @@ def truncate_log_from_top(log: str, max_lines: int = 500) -> str:
     # 짧으면 그냥 그대로 반환
     return log
 
-
-
-@register_tool("run_gradle_tool")
-class RunGradleTool(BaseTool):
+class RunGradleTool(Tool):
     name = "run_gradle_tool"
     description = (
         f"Run a safe Gradle command for a Spring project under the allowed directory only and analyze the result. "
@@ -732,81 +428,79 @@ class RunGradleTool(BaseTool):
         f"Allowed prefix is: {ALLOWED_PREFIX}. "
         f"Allowed tasks: {', '.join(ALLOWED_TASKS.keys())}"
     )
-    parameters = {
-        "type": "object",
-        "properties": {
-            "project_root": {
-                "type": "string",
-                "description": "Absolute path to the Gradle project root directory",
-            },
-            "task": {
-                "type": "string",
-                "description": "Gradle task name. One of: test, build",
-            },
-            "context_summary": {
-                "type": "string",
-                "description": "detailed summary of the implementation(or fix) intent and why this Gradle run is being executed.",
-            },
-            "recent_modified_files": {
-                "type": "string",
-                "description": "Comma-separated string of files changed most recently (e.g., 'fileA.java, fileB.java').",
-            },
-            "suspected_symbols": {
-                "type": "string",
-                "description": "Comma-separated string of symbols, methods, classes, or fields likely related to the failure (e.g., 'saveAndFindById_success, @Rollback').",
-            },
-            "previous_failure_summary": {
-                "type": "string",
-                "description": "Brief summary of the last failure and what was already tried.",
-            },
-            "previous_actions_taken": {
-                "type": "string",
-                "description": "Comma-separated string of explicit coding actions taken right before this run (e.g., 'Deleted @Rollback, Added flush()')."
-            }
+    inputs = {
+        "project_root": {
+            "type": "string",
+            "description": "Absolute path to the Gradle project root directory",
         },
-        "required": ["project_root", "task", "context_summary"],
+        "task": {
+            "type": "string",
+            "description": "Gradle task name. One of: test, build",
+        },
+        "context_summary": {
+            "type": "string",
+            "description": "detailed summary of the implementation(or fix) intent and why this Gradle run is being executed.",
+        },
+        "recent_modified_files": {
+            "type": "string",
+            "description": "Comma-separated string of files changed most recently (e.g., 'fileA.java, fileB.java').",
+            "nullable": True,
+        },
+        "suspected_symbols": {
+            "type": "string",
+            "description": "Comma-separated string of symbols, methods, classes, or fields likely related to the failure (e.g., 'saveAndFindById_success, @Rollback').",
+            "nullable": True,
+        },
+        "previous_failure_summary": {
+            "type": "string",
+            "description": "Brief summary of the last failure and what was already tried.",
+            "nullable": True,
+        },
+        "previous_actions_taken": {
+            "type": "string",
+            "description": "Comma-separated string of explicit coding actions taken right before this run (e.g., 'Deleted @Rollback, Added flush()').",
+            "nullable": True,
+        }
     }
 
-    def _close_agent(self, agent: Assistant) -> None:
-        for method_name in ("close", "shutdown", "aclose"):
-            method = getattr(agent, method_name, None)
-            if callable(method):
-                try:
-                    method()
-                except Exception:
-                    pass
-                break
-        gc.collect()
+    output_type = "string"
 
 
-    def call(self, params: str, **kwargs) -> str:
+    def forward(
+            self,
+            project_root: str,
+            task: str,
+            context_summary: str,
+            recent_modified_files: str = "",
+            suspected_symbols: str = "",
+            previous_failure_summary: str = "",
+            previous_actions_taken: str = ""
+    ) -> str:
         logger.info("run_gradle_tool called")
         start_time = time.monotonic()
 
-        agent = None
         try:
+            root_path = Path(project_root).expanduser().resolve()
+            allowed_path = Path(ALLOWED_PREFIX).expanduser().resolve()
 
-            data = json.loads(params)
-            project_root = Path(data["project_root"]).expanduser().resolve()
-            task = data["task"]
-
-            if project_root != ALLOWED_PREFIX and ALLOWED_PREFIX not in project_root.parents:
+            # Security: Path traversal checks
+            if root_path != allowed_path and allowed_path not in root_path.parents:
                 return json.dumps({
                     "ok": False,
                     "error": f"access denied. Allowed path prefix: {ALLOWED_PREFIX}",
                 }, ensure_ascii=False)
 
-            if not project_root.is_dir():
+            if not root_path.is_dir():
                 return json.dumps({
                     "ok": False,
-                    "error": f"not a directory: {project_root}",
+                    "error": f"not a directory: {root_path}",
                 }, ensure_ascii=False)
 
-            gradlew = project_root / "gradlew"
+            gradlew = root_path / "gradlew"
             if not gradlew.is_file():
                 return json.dumps({
                     "ok": False,
-                    "error": f"gradlew not found in: {project_root}",
+                    "error": f"gradlew not found in: {root_path}",
                 }, ensure_ascii=False)
 
             if task not in ALLOWED_TASKS:
@@ -816,9 +510,11 @@ class RunGradleTool(BaseTool):
                     "allowed_tasks": list(ALLOWED_TASKS.keys()),
                 }, ensure_ascii=False)
 
+            # Execution
+            command_list = ALLOWED_TASKS[task]
             result = subprocess.run(
-                ALLOWED_TASKS[task],
-                cwd=str(project_root),
+                command_list,
+                cwd=str(root_path),
                 capture_output=True,
                 text=True,
                 timeout=300,
@@ -841,10 +537,18 @@ class RunGradleTool(BaseTool):
             log = f"""
             [STDOUT]
             {stdout_text}
-            
+
             [STDERR]
             {stderr_text}
             """
+
+
+            # 2. Identify the smallest set of suspicious files related to the failure.
+            # 3. Analyze each suspicious file with one_file_analyzer_tool.
+
+            # # 5. NEVER read the entire file using `read_file` or similar tools. You MUST extract code context strictly using `one_file_analyzer_tool` around the failed line numbers. Reading full files will cause token overflow and immediate termination.
+            # 7. If the error log explicitly contains a file path and/or line number, should call one_file_analyzer_tool.
+            # 8. Limit the analysis to at most 5 files, and prefer 3 files or fewer when possible.
 
             system_p = """
             You are a Gradle Failure Triage Agent.
@@ -861,15 +565,9 @@ class RunGradleTool(BaseTool):
             4. HIGH DENSITY, NO FLUFF: Keep the output concise, structured, and free of vague conversational filler.
             5. Execute ONLY the requested task. No extra info, commentary, or suggestions. Strictly adhere to the scope.
             6. Use the file analysis only to confirm the failure cause, failed target, location, and fix action.
-            
+
             7. BLIND SPOT CHECK: If `previous_failure_summary` indicates a fix was attempted but the error remains identical, actively suspect that the previous fix was purely additive (e.g., adding to class level) and was SHADOWED/OVERRIDDEN by existing local configurations (e.g., method-level annotations). Direct the next action to DELETE the conflicting local code.
             """
-
-            context_summary = str(data.get("context_summary", "")).strip()
-            recent_modified_files = str(data.get("recent_modified_files", "")).strip()
-            suspected_symbols = str(data.get("suspected_symbols", "")).strip()
-            previous_failure_summary = str(data.get("previous_failure_summary", "")).strip()
-            previous_actions_taken = str(data.get("previous_actions_taken", "")).strip()
 
             prompt = f"""
             Analyze the execution results and failure facts from the raw log provided below, and diagnose the underlying issue based on the context.
@@ -877,19 +575,19 @@ class RunGradleTool(BaseTool):
             Project Root: {project_root}
             Command: {command}
             Exit Code: {retcode}
-            
+
             [Handoff Summary]
             Implementation intent: {context_summary or "(none)"}
-            Recent modified files: {json.dumps(recent_modified_files, ensure_ascii=False, indent=2) if recent_modified_files else "(none)"}
-            Suspected symbols: {json.dumps(suspected_symbols, ensure_ascii=False, indent=2) if suspected_symbols else "(none)"}
+            Recent modified files: {recent_modified_files or "(none)"}
+            Suspected symbols: {suspected_symbols or "(none)"}
             Previous failure summary: {previous_failure_summary or "(none)"}
-            Previous actions taken: {json.dumps(previous_actions_taken, ensure_ascii=False, indent=2) if previous_actions_taken else "(none)"}
-            
+            Previous actions taken: {previous_actions_taken or "(none)"}
+
             [Raw Log to Analyze]
             {log}
-            
+
             [Required Workflow]
-            
+
             1. Read the failure log only.
             2. Extract only explicit facts from the log (failed test, exact error, exception type, location).
             3. Choose one problem to solve first.
@@ -897,158 +595,146 @@ class RunGradleTool(BaseTool):
             5. Infer the most likely cause.
             6. Extract a candidate file bundle.
             7. Suggest a fix direction.
-            
+
             [Decision Rules]
-            
+
             * Prefer log evidence over speculation.
             * If the current error is identical to the `previous_failure_summary`, explicitly evaluate if a structural mismatch (e.g., Entity mapping vs Database schema vs Test data setup) is the root cause. Do not default to modifying transaction scopes.
-            
+
             [Output Format]
             Use the exact section headers below and do not use JSON.
-            
+
             STATUS
             FAILED
-            
+
             SELECTED_ISSUE
             the one problem chosen to solve first
-            
+
             FAILURE_TYPE
             one of the allowed categories
-            
+
             FAILED_TARGET
             task or test method name
-            
+
             LOCATION
             file_path:symbol or unknown
-            
+
             ERROR_SUMMARY
             exception type and short message
-            
+
             LOG_BASED_INFERENCE
             1-2 sentences explaining what the log most strongly suggests
-            
+
             CANDIDATE_FILE_BUNDLE
             1. absolute file path — why this file belongs to the chosen issue bundle — confidence: high|medium|low
-            
+
             ROOT_CAUSE
             1-2 sentences. If `previous_actions_taken` failed, explicitly state if existing local/method-level code is shadowing/overriding the added code.
-            
+
             REQUIRED_OPERATOR
             Must be one of: [REQUIRE_DELETE], [REQUIRE_MODIFY], [REQUIRE_ADD].
-            
+
             * Use REQUIRE_ADD for missing implementations.
             * If a previous REQUIRE_ADD failed, strongly consider switching to REQUIRE_DELETE or REQUIRE_MODIFY to resolve scope conflicts.
-            
+
             FIX_DIRECTION
             Brief action item describing what should be changed first based on the REQUIRED_OPERATOR.
-            
+
             CONFIDENCE
             high|medium|low
             """
 
-            agent = Assistant(
-                llm=llm_cfg,
-                system_message=system_p,
-                function_list=[],
+
+            agent = CodeAgent(
+                model=model2,
+                tools=[],
+                instructions=system_p,
+                max_steps=20,
+                use_structured_outputs_internally=True,
+                verbosity_level=1
             )
 
-            final_text = None
-
-            for chunk in agent.run(messages=[{"role": "user", "content": prompt}]):
-                if isinstance(chunk, list):
-                    for item in chunk:
-                        if isinstance(item, dict) and item.get("role") == "assistant":
-                            final_text = item.get("content", final_text)
+            final_text = agent.run(prompt)
 
             return json.dumps(
-                {"ok": False, "result": final_text},
+                {"result": str(final_text)},
                 ensure_ascii=False,
             )
-
 
         except subprocess.TimeoutExpired:
             elapsed = time.monotonic() - start_time
             logger.info( "run_gradle_tool failed in %.2f sec", elapsed )
             return json.dumps({
-                "ok": False,
                 "error": "command timed out after 300 seconds",
             }, ensure_ascii=False)
         except Exception as e:
             elapsed = time.monotonic() - start_time
             logger.info( "run_gradle_tool failed in %.2f sec", elapsed )
             return json.dumps({
-                "ok": False,
                 "error": str(e),
             }, ensure_ascii=False)
 
         finally:
-            self._close_agent(agent)
             elapsed = time.monotonic() - start_time
             logger.info( "run_gradle_tool finished in %.2f sec", elapsed )
 
 
-@register_tool("implement_worker_tool2")
-class ImplementChangeWorkerTool2(BaseTool):
-    name = "implement_worker_tool2"
+class ImplementChangeWorkerTool(Tool):
+    name = "implement_worker_tool"
     description = (
         "A tool that performs coding tasks. It reads target files and applies precise modifications "
         "using a Search/Replace text format. It handles one file at a time."
     )
-    parameters = {
-        "type": "object",
-        "properties": {
-            "task": {
-                "type": "string",
-                "description": "The overall feature or bug fix being implemented (Big Picture)."
-            },
-            "goal": {
-                "type": "string",
-                "description": "The final expected outcome or behavior after this task is complete."
-            },
-            "analysis_context": {
-                "type": "string",
-                "description":
-                    """
-                    CRITICAL: Must contain a detailed, file-by-file breakdown of what to change. 
-                    Format: '- [File Path]: [Specific modification instructions]'. 
-                    """
-            },
-            "files": {
-                "type": "string",
-                "description": "Comma-separated string of absolute target file paths."
-            },
-            "project_root": {
-                "type": "string",
-                "description": "Project root absolute path",
-            },
+    inputs = {
+        "task": {
+            "type": "string",
+            "description": "The overall feature or bug fix being implemented (Big Picture)."
         },
-        "required": ["task", "goal", "analysis_context", "files", "project_root"]
+        "goal": {
+            "type": "string",
+            "description": "The final expected outcome or behavior after this task is complete."
+        },
+        "analysis_context": {
+            "type": "string",
+            "description":
+                """
+                CRITICAL: Must contain a detailed, file-by-file breakdown of what to change.
+                Format: '- [File Path]: [Specific modification instructions]'.
+                """
+        },
+        "files": {
+            "type": "string",
+            "description": "Comma-separated string of absolute target file paths."
+        },
+        "project_root": {
+            "type": "string",
+            "description": "Project root absolute path",
+        },
     }
 
-    def _close_agent(self, agent: Assistant) -> None:
-        for method_name in ("close", "shutdown", "aclose"):
-            method = getattr(agent, method_name, None)
-            if callable(method):
-                try:
-                    method()
-                except Exception:
-                    pass
-                break
-        gc.collect()
+    output_type = "string"
 
-    def call(self, params: str, **kwargs) -> str:
+    # def _close_agent(self, agent: Assistant) -> None:
+    #     for method_name in ("close", "shutdown", "aclose"):
+    #         method = getattr(agent, method_name, None)
+    #         if callable(method):
+    #             try:
+    #                 method()
+    #             except Exception:
+    #                 pass
+    #             break
+    #     gc.collect()
+
+    def forward(self, task: str, goal: str, analysis_context: str, files: str, project_root: str) -> str:
         logger.info("implement_worker_tool called (Text Parsing Mode)")
         start_time = time.monotonic()
-        agents_used = []
         results_summary = {}
 
         try:
-            data = json.loads(params)
-            task = data["task"].strip()
-            goal = data["goal"].strip()
-            files_str = str(data.get("files", ""))
-            analysis_context = data["analysis_context"]
-            project_root = str(data.get("project_root", ".")) # Gradle 명령어를 실행할 프로젝트 루트 경로
+            task = task.strip()
+            goal = goal.strip()
+            files_str = str(files)
+            project_root = str(project_root) # Gradle 명령어를 실행할 프로젝트 루트 경로
             global_refactor_triggers = []
 
             # 1. 파일 목록 파싱 및 검증
@@ -1077,9 +763,9 @@ class ImplementChangeWorkerTool2(BaseTool):
             You are a Precise Code Implementation Orchestrator. First, evaluate if changes or refactorings are actually required based on the task.
             - Condition A (Code Changes): If modifying existing code is required, use the `<<<< SEARCH ==== >>>> REPLACE` format. If NO modifications are required, you MUST output exactly `NO_CHANGES_NEEDED`.
             - Condition B (Refactoring): If renaming/moving is required, use the Trigger formats. If NO global refactoring is required, you MUST output exactly `NO_REFACTORINGS_NEEDED`.
-            
+
             You MUST NOT use tool calls. Output in plain text using the EXACT format below.
-            
+
             [Hard Rules - CRITICAL]
             1. TASK FILTERING (IGNORE STYLING): If the user or `task` explicitly requests code formatting, styling, beautification, or import cleanup, YOU MUST SILENTLY IGNORE those specific requests. Execute ONLY the logical/functional code changes.
             2. MINIMALISM: Do only the required task.
@@ -1105,25 +791,25 @@ class ImplementChangeWorkerTool2(BaseTool):
                 Goal: {goal}
                 Analysis Context: {analysis_context}
                 [Target File: {file_path}]
-                
+
                 [Current File Content]
                 ````
                 {original_content}
                 ````
-                
+
                 [OUTPUT FORMAT]
                 1. EXACT MATCH: The SEARCH block must exactly match the existing code. Include 1-2 lines of unchanged code before and after the modified lines to ensure unique matching.
                 2. If NO renaming or modifying is required, YOU MUST NOT output any `<<<< SEARCH ==== >>>> REPLACE` blocks. Simply respond 'NO_CHANGES_NEEDED'.
                 3. You are a Precise Code Implementation Orchestrator. Provide the SEARCH/REPLACE blocks and OpenRewrite Triggers to execute the requested changes for this file.
                 4. You MUST NOT use JSON tool calls. You must output the code changes in plain text using the EXACT format below.
-                
+
                 [ORDER OF OUTPUT - CRITICAL]
                 You MUST follow this strict order to prevent parsing errors:
                 1. CODE PATCH SECTION: Output ALL `<<<< SEARCH ==== >>>> REPLACE` blocks. (Or output `NO_CHANGES_NEEDED` if none).
                 2. REFACTORING SECTION: Output ALL refactoring triggers at the VERY END. (Or output `NO_REFACTORINGS_NEEDED` if none).
                    - [SCOPE ORDERING RULE] If outputting multiple triggers, order them from SMALLEST to LARGEST scope: (1) RENAME_FIELD/VARIABLE (2) RENAME_METHOD (3) RENAME_CLASS (4) MOVE_PACKAGE.
                 3. Do NOT mix or interleave the code patches and the refactoring triggers.
-                
+
                 [SAMPLE: WHEN NO CHANGES ARE NEEDED]
                 NO_CHANGES_NEEDED
                 NO_REFACTORINGS_NEEDED
@@ -1134,27 +820,27 @@ class ImplementChangeWorkerTool2(BaseTool):
                 ====
                 [Write the new code. Leave blank to delete the search block.]
                 >>>> REPLACE
-                
+
                 [SAMPLE: WHEN REFACTORINGS ARE NEEDED (Triggers)]
                 [SAMPLE 1]: for rename method
                 <<<< RENAME_METHOD
                 old: package.ClassName oldMethodName(..)
                 new: newMethodName
                 >>>> RENAME_METHOD
-                
+
                 [SAMPLE 2]: for rename class
                 <<<< RENAME_CLASS
                 old: fully.qualified.OldClassName
                 new: fully.qualified.NewClassName
                 >>>> RENAME_CLASS
-                
+
                 [SAMPLE 3]: for rename field
                 <<<< RENAME_FIELD
                 class: fully.qualified.ClassName
                 old: oldFieldName
                 new: newFieldName
                 >>>> RENAME_FIELD
-                
+
                 [SAMPLE 4]: for move package
                 <<<< MOVE_PACKAGE
                 old: old.package.name
@@ -1162,23 +848,20 @@ class ImplementChangeWorkerTool2(BaseTool):
                 >>>> MOVE_PACKAGE
                 """
 
-                # 도구(Tool) 할당 없이 순수 Text 생성 에이전트 생성
-                agent = Assistant(
-                    llm=coding_llm_cfg,
-                    system_message=system_p,
-                    function_list=[], # 핵심 변경점: 툴을 주지 않음
+                agent = CodeAgent(
+                    model=model2,
+                    tools=[],
+                    instructions=system_p,
+                    max_steps=20,
+                    use_structured_outputs_internally=True
                 )
-                agents_used.append(agent)
 
-                # 에이전트 응답 스트리밍
-                agent_text = ""
-                for chunk in agent.run(messages=[{"role": "user", "content": prompt}]):
-                    if isinstance(chunk, list):
-                        for item in chunk:
-                            if isinstance(item, dict) and item.get("role") == "assistant":
-                                agent_text = item.get("content", agent_text)
-                    elif isinstance(chunk, dict) and chunk.get("role") == "assistant":
-                        agent_text = chunk.get("content", agent_text)
+                agent_text = str(agent.run(prompt))
+
+                # return json.dumps(
+                #     {"result": str(final_text)},
+                #     ensure_ascii=False,
+                # )
 
                 logger.info("")
                 logger.info(f"deletetodo파일코딩 블럭 결과: {file_path}")
@@ -1211,8 +894,6 @@ class ImplementChangeWorkerTool2(BaseTool):
             return json.dumps({"error": str(e)}, ensure_ascii=False)
 
         finally:
-            for ag in agents_used:
-                self._close_agent(ag)
             elapsed = time.monotonic() - start_time
             logger.info(f"implement_worker_tool finished in {elapsed:.2f} sec")
 
